@@ -2,6 +2,8 @@
 
 Run [Claude Code](https://docs.anthropic.com/en/docs/claude-code) in an isolated NixOS microVM via [microvm.nix](https://github.com/microvm-nix/microvm.nix) (QEMU+KVM). Your project directory is mounted read-write at `/work` inside the guest via virtiofs — no root required.
 
+Claude Code starts automatically on boot. Exiting claude shuts down the VM.
+
 ## Prerequisites
 
 - [Nix](https://nixos.org/) with flakes enabled
@@ -16,8 +18,6 @@ make vm.run
 # Mount a specific project directory
 WORK_DIR=/path/to/project make vm.run
 ```
-
-You'll be auto-logged in as `claude` and dropped into `/work`. Run `claude` to start a session.
 
 ## Usage from anywhere
 
@@ -75,9 +75,19 @@ systemctl --user status claude-vm-virtiofsd
 systemctl --user stop claude-vm-virtiofsd
 ```
 
+### Sandboxing
+
+The VM provides strong isolation from the host:
+
+- **Filesystem** — only `/work` is shared; everything else is VM-local and ephemeral
+- **Processes** — completely isolated (separate kernel)
+- **Network** — QEMU user-mode NAT; the VM can reach the internet but can't bind host ports (except the explicit 7160 forward for OAuth)
+
+To let Claude Code run fully autonomously inside the VM (no permission prompts), add `--dangerously-skip-permissions` to the `claude` invocation in `flake.nix`.
+
 ### Shutting down
 
-Exiting the shell runs `sudo poweroff` automatically. You can also run it manually.
+Exiting Claude Code automatically powers off the VM.
 
 ## Customization
 
@@ -102,5 +112,4 @@ Rebuild with `make vm`.
 | RAM      | 4096 MB |
 | vCPUs    | 4       |
 | Network  | User-mode (SLiRP) |
-| Store    | Host nix store via 9p (read-only) |
 | Work dir | Host directory via virtiofs (read-write) |
