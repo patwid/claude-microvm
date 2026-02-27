@@ -92,7 +92,7 @@
             programs.bash.interactiveShellInit = ''
               git config --global --add safe.directory /work 2>/dev/null || true
               cd /work 2>/dev/null || true
-              claude; sudo poweroff
+              claude --dangerously-skip-permissions; sudo poweroff
             '';
 
             systemd.tmpfiles.rules = [
