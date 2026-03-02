@@ -89,6 +89,7 @@
 
             environment.variables = {
               SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+              COLORTERM = "truecolor";
             };
 
             programs.bash.interactiveShellInit = ''
