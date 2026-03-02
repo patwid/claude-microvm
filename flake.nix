@@ -96,7 +96,7 @@
             environment.variables = {
               SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
               COLORTERM = "truecolor";
-              CLAUDE_CONFIG_DIR = "/home/claude/.claude";
+              # CLAUDE_CONFIG_DIR = "/home/claude/.claude";
             };
 
             programs.bash.interactiveShellInit = ''
