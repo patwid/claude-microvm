@@ -44,6 +44,12 @@
                   mountPoint = "/work";
                   proto = "virtiofs";
                 }
+                {
+                  tag = "claude-credentials";
+                  source = "/home/patwid/.claude-microvm";
+                  mountPoint = "/home/claude/.claude";
+                  proto = "virtiofs";
+                }
               ];
 
               qemu.extraArgs = [
@@ -90,6 +96,7 @@
             environment.variables = {
               SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
               COLORTERM = "truecolor";
+              CLAUDE_CONFIG_DIR = "/home/claude/.claude";
             };
 
             programs.bash.interactiveShellInit = ''
