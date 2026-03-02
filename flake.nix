@@ -145,6 +145,7 @@
 
         if [ "$NEED_START" = "1" ]; then
           rm -f "$SOCK"
+          rm -f "$CREDS_SOCK"
 
           # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
           # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
@@ -152,6 +153,7 @@
           ${pkgs.systemd}/bin/systemd-run --user --unit="$UNIT" --collect \
             -- ${virtiofsd}/bin/virtiofsd \
               --socket-path="$SOCK" \
+              --socket-path="$CREDS_SOCK" \
               --shared-dir="$WORK" \
               --shared-dir="/home/patwid/.claude-microvm" \
               --sandbox=namespace \
