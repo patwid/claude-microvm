@@ -96,7 +96,7 @@
             environment.variables = {
               SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
               COLORTERM = "truecolor";
-              # CLAUDE_CONFIG_DIR = "/home/claude/.claude";
+              CLAUDE_CONFIG_DIR = "/home/claude/.claude";
             };
 
             programs.bash.interactiveShellInit = ''
@@ -129,6 +129,7 @@
         RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
         ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
         SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
+        CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
         UNIT="claude-vm-virtiofsd-$ID"
         STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
 
@@ -175,6 +176,7 @@
         bash <(${pkgs.gnused}/bin/sed \
           -e "s|/tmp/claude-vm-work|$WORK|g" \
           -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
+          -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
           ${runner}/bin/microvm-run)
       '';
       };
