@@ -152,6 +152,7 @@
             -- ${virtiofsd}/bin/virtiofsd \
               --socket-path="$SOCK" \
               --shared-dir="$WORK" \
+              --shared-dir="/home/patwid/.claude-microvm" \
               --sandbox=namespace \
               --uid-map ":0:$(id -u):1:" \
               --gid-map ":0:$(id -g):1:" \
