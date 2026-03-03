@@ -107,6 +107,7 @@
 
             systemd.tmpfiles.rules = [
               "d /work 0755 claude claude -"
+              "d /home/claude/.claude 0700 claude claude -"
             ];
 
 
@@ -128,51 +129,79 @@
         WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
         RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
         ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
+
         SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
-        CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
         UNIT="claude-vm-virtiofsd-$ID"
         STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
 
-        # (Re)start virtiofsd if not running or WORK_DIR changed
-        NEED_START=1
+        CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
+        CREDS_UNIT="claude-vm-creds-virtiofsd-$ID"
+        CREDS_STATE="$RUNTIME/claude-vm-creds-virtiofsd-$ID.dir"
+        CREDS_DIR="$HOME/.claude-microvm"
+
+        # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
+        VIRTIOFSD_COMMON=(
+          --sandbox=namespace
+          --uid-map ":0:$(id -u):1:"
+          --gid-map ":0:$(id -g):1:"
+          --translate-uid "map:1000:0:1"
+          --translate-gid "map:1000:0:1"
+          --socket-group="$(id -gn)"
+          --xattr
+        )
+
+        # --- Work virtiofsd ---
+        # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
+        # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
+        # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
+        NEED_START_WORK=1
         if ${pkgs.systemd}/bin/systemctl --user is-active "$UNIT" &>/dev/null; then
           if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
-            NEED_START=0
+            NEED_START_WORK=0
           else
             ${pkgs.systemd}/bin/systemctl --user stop "$UNIT" 2>/dev/null || true
           fi
         fi
 
-        if [ "$NEED_START" = "1" ]; then
+        if [ "$NEED_START_WORK" = "1" ]; then
           rm -f "$SOCK"
-          rm -f "$CREDS_SOCK"
-
-          # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
-          # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
-          # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
           ${pkgs.systemd}/bin/systemd-run --user --unit="$UNIT" --collect \
             -- ${virtiofsd}/bin/virtiofsd \
               --socket-path="$SOCK" \
-              --socket-path="$CREDS_SOCK" \
               --shared-dir="$WORK" \
-              --shared-dir="/home/patwid/.claude-microvm" \
-              --sandbox=namespace \
-              --uid-map ":0:$(id -u):1:" \
-              --gid-map ":0:$(id -g):1:" \
-              --translate-uid "map:1000:0:1" \
-              --translate-gid "map:1000:0:1" \
-              --socket-group="$(id -gn)" \
-              --xattr
-
+              "''${VIRTIOFSD_COMMON[@]}"
           echo "$WORK" > "$STATE"
+        fi
 
-          # Wait for socket
+        # --- Credentials virtiofsd ---
+        NEED_START_CREDS=1
+        if ${pkgs.systemd}/bin/systemctl --user is-active "$CREDS_UNIT" &>/dev/null; then
+          if [ -f "$CREDS_STATE" ] && [ "$(cat "$CREDS_STATE")" = "$CREDS_DIR" ] && [ -S "$CREDS_SOCK" ]; then
+            NEED_START_CREDS=0
+          else
+            ${pkgs.systemd}/bin/systemctl --user stop "$CREDS_UNIT" 2>/dev/null || true
+          fi
+        fi
+
+        if [ "$NEED_START_CREDS" = "1" ]; then
+          rm -f "$CREDS_SOCK"
+          mkdir -p "$CREDS_DIR"
+          ${pkgs.systemd}/bin/systemd-run --user --unit="$CREDS_UNIT" --collect \
+            -- ${virtiofsd}/bin/virtiofsd \
+              --socket-path="$CREDS_SOCK" \
+              --shared-dir="$CREDS_DIR" \
+              "''${VIRTIOFSD_COMMON[@]}"
+          echo "$CREDS_DIR" > "$CREDS_STATE"
+        fi
+
+        # Wait for both sockets
+        for sock in "$SOCK" "$CREDS_SOCK"; do
           for i in $(seq 1 50); do
-            [ -S "$SOCK" ] && break
+            [ -S "$sock" ] && break
             sleep 0.1
           done
-          [ -S "$SOCK" ] || { echo "error: virtiofsd socket did not appear"; exit 1; }
-        fi
+          [ -S "$sock" ] || { echo "error: virtiofsd socket $sock did not appear"; exit 1; }
+        done
 
         # Run QEMU with corrected paths
         bash <(${pkgs.gnused}/bin/sed \
