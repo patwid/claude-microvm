@@ -24,6 +24,14 @@
 
             networking.hostName = "claude-vm";
 
+            virtualisation.docker = {
+              enable = true;
+              rootless = {
+                enable = true;
+                setSocketVariable = true;
+              };
+            };
+
             microvm = {
               hypervisor = "qemu";
               mem = 8192;
