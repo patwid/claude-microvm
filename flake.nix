@@ -145,98 +145,102 @@
       overlays.default = final: prev: {
         claude-vm =
           let
-            inherit (final) virtiofsd;
             runner = self.nixosConfigurations.claude-vm.config.microvm.runner.qemu;
-            systemctl = lib.getExe' final.systemd "systemctl";
-            systemd-run = lib.getExe' final.systemd "systemd-run";
-            # TODO: writeShellApplication instead of writeShellScriptBin
           in
-          final.writeShellScriptBin "claude-run" ''
-            set -euo pipefail
-            WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
-            RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-            ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
+          final.writeShellApplication {
+            name = "claude-run";
+            runtimeInputs = with final; [
+              systemd
+              virtiofsd
+            ];
 
-            SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
-            UNIT="claude-vm-virtiofsd-$ID"
-            STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
+            text = ''
+              set -euo pipefail
+              WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
+              RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+              ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
 
-            CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
-            CREDS_UNIT="claude-vm-creds-virtiofsd-$ID"
-            CREDS_STATE="$RUNTIME/claude-vm-creds-virtiofsd-$ID.dir"
-            CREDS_DIR="$HOME/.claude-microvm"
+              SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
+              UNIT="claude-vm-virtiofsd-$ID"
+              STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
 
-            # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
-            # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
-            # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
-            # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
-            VIRTIOFSD_COMMON=(
-              --sandbox=namespace
-              --uid-map ":0:$(id -u):1:"
-              --gid-map ":0:$(id -g):1:"
-              --translate-uid "map:1000:0:1"
-              --translate-gid "map:1000:0:1"
-              --socket-group="$(id -gn)"
-              --xattr
-            )
+              CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
+              CREDS_UNIT="claude-vm-creds-virtiofsd-$ID"
+              CREDS_STATE="$RUNTIME/claude-vm-creds-virtiofsd-$ID.dir"
+              CREDS_DIR="$HOME/.claude-microvm"
 
-            # --- Work virtiofsd ---
-            NEED_START_WORK=1
-            if ${systemctl} --user is-active "$UNIT" &>/dev/null; then
-              if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
-                NEED_START_WORK=0
-              else
-                ${systemctl} --user stop "$UNIT" 2>/dev/null || true
+              # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
+              # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
+              # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
+              # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
+              VIRTIOFSD_COMMON=(
+                --sandbox=namespace
+                --uid-map ":0:$(id -u):1:"
+                --gid-map ":0:$(id -g):1:"
+                --translate-uid "map:1000:0:1"
+                --translate-gid "map:1000:0:1"
+                --socket-group="$(id -gn)"
+                --xattr
+              )
+
+              # --- Work virtiofsd ---
+              NEED_START_WORK=1
+              if systemctl --user is-active "$UNIT" &>/dev/null; then
+                if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
+                  NEED_START_WORK=0
+                else
+                  systemctl --user stop "$UNIT" 2>/dev/null || true
+                fi
               fi
-            fi
 
-            if [ "$NEED_START_WORK" = "1" ]; then
-              rm -f "$SOCK"
-              ${systemd-run} --user --unit="$UNIT" --collect \
-                -- ${virtiofsd}/bin/virtiofsd \
-                  --socket-path="$SOCK" \
-                  --shared-dir="$WORK" \
-                  "''${VIRTIOFSD_COMMON[@]}"
-              echo "$WORK" > "$STATE"
-            fi
-
-            # --- Credentials virtiofsd ---
-            NEED_START_CREDS=1
-            if ${systemctl} --user is-active "$CREDS_UNIT" &>/dev/null; then
-              if [ -f "$CREDS_STATE" ] && [ "$(cat "$CREDS_STATE")" = "$CREDS_DIR" ] && [ -S "$CREDS_SOCK" ]; then
-                NEED_START_CREDS=0
-              else
-                ${systemctl} --user stop "$CREDS_UNIT" 2>/dev/null || true
+              if [ "$NEED_START_WORK" = "1" ]; then
+                rm -f "$SOCK"
+                systemd-run --user --unit="$UNIT" --collect \
+                  -- virtiofsd \
+                    --socket-path="$SOCK" \
+                    --shared-dir="$WORK" \
+                    "''${VIRTIOFSD_COMMON[@]}"
+                echo "$WORK" > "$STATE"
               fi
-            fi
 
-            if [ "$NEED_START_CREDS" = "1" ]; then
-              rm -f "$CREDS_SOCK"
-              mkdir -p "$CREDS_DIR"
-              ${systemd-run} --user --unit="$CREDS_UNIT" --collect \
-                -- ${virtiofsd}/bin/virtiofsd \
-                  --socket-path="$CREDS_SOCK" \
-                  --shared-dir="$CREDS_DIR" \
-                  "''${VIRTIOFSD_COMMON[@]}"
-              echo "$CREDS_DIR" > "$CREDS_STATE"
-            fi
+              # --- Credentials virtiofsd ---
+              NEED_START_CREDS=1
+              if systemctl --user is-active "$CREDS_UNIT" &>/dev/null; then
+                if [ -f "$CREDS_STATE" ] && [ "$(cat "$CREDS_STATE")" = "$CREDS_DIR" ] && [ -S "$CREDS_SOCK" ]; then
+                  NEED_START_CREDS=0
+                else
+                  systemctl --user stop "$CREDS_UNIT" 2>/dev/null || true
+                fi
+              fi
 
-            # Wait for both sockets
-            for sock in "$SOCK" "$CREDS_SOCK"; do
-              for i in $(seq 1 50); do
-                [ -S "$sock" ] && break
-                sleep 0.1
+              if [ "$NEED_START_CREDS" = "1" ]; then
+                rm -f "$CREDS_SOCK"
+                mkdir -p "$CREDS_DIR"
+                systemd-run --user --unit="$CREDS_UNIT" --collect \
+                  -- virtiofsd \
+                    --socket-path="$CREDS_SOCK" \
+                    --shared-dir="$CREDS_DIR" \
+                    "''${VIRTIOFSD_COMMON[@]}"
+                echo "$CREDS_DIR" > "$CREDS_STATE"
+              fi
+
+              # Wait for both sockets
+              for sock in "$SOCK" "$CREDS_SOCK"; do
+                for _ in $(seq 1 50); do
+                  [ -S "$sock" ] && break
+                  sleep 0.1
+                done
+                [ -S "$sock" ] || { echo "error: virtiofsd socket $sock did not appear"; exit 1; }
               done
-              [ -S "$sock" ] || { echo "error: virtiofsd socket $sock did not appear"; exit 1; }
-            done
 
-            # Run QEMU with corrected paths
-            bash <(${lib.getExe final.gnused} \
-              -e "s|/tmp/claude-vm-work|$WORK|g" \
-              -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
-              -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
-              ${lib.getExe runner})
-          '';
+              # Run QEMU with corrected paths
+              bash <(sed \
+                -e "s|/tmp/claude-vm-work|$WORK|g" \
+                -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
+                -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
+                ${lib.getExe runner})
+            '';
+          };
       };
     }
     // eachDefaultSystem (
