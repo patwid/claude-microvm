@@ -147,6 +147,8 @@
           let
             inherit (final) virtiofsd;
             runner = self.nixosConfigurations.claude-vm.config.microvm.runner.qemu;
+            systemctl = lib.getExe' final.systemd "systemctl";
+            systemd-run = lib.getExe' final.systemd "systemd-run";
             # TODO: writeShellApplication instead of writeShellScriptBin
           in
           final.writeShellScriptBin "claude-run" ''
@@ -180,17 +182,17 @@
 
             # --- Work virtiofsd ---
             NEED_START_WORK=1
-            if ${final.systemd}/bin/systemctl --user is-active "$UNIT" &>/dev/null; then
+            if ${systemctl} --user is-active "$UNIT" &>/dev/null; then
               if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
                 NEED_START_WORK=0
               else
-                ${final.systemd}/bin/systemctl --user stop "$UNIT" 2>/dev/null || true
+                ${systemctl} --user stop "$UNIT" 2>/dev/null || true
               fi
             fi
 
             if [ "$NEED_START_WORK" = "1" ]; then
               rm -f "$SOCK"
-              ${final.systemd}/bin/systemd-run --user --unit="$UNIT" --collect \
+              ${systemd-run} --user --unit="$UNIT" --collect \
                 -- ${virtiofsd}/bin/virtiofsd \
                   --socket-path="$SOCK" \
                   --shared-dir="$WORK" \
@@ -200,18 +202,18 @@
 
             # --- Credentials virtiofsd ---
             NEED_START_CREDS=1
-            if ${final.systemd}/bin/systemctl --user is-active "$CREDS_UNIT" &>/dev/null; then
+            if ${systemctl} --user is-active "$CREDS_UNIT" &>/dev/null; then
               if [ -f "$CREDS_STATE" ] && [ "$(cat "$CREDS_STATE")" = "$CREDS_DIR" ] && [ -S "$CREDS_SOCK" ]; then
                 NEED_START_CREDS=0
               else
-                ${final.systemd}/bin/systemctl --user stop "$CREDS_UNIT" 2>/dev/null || true
+                ${systemctl} --user stop "$CREDS_UNIT" 2>/dev/null || true
               fi
             fi
 
             if [ "$NEED_START_CREDS" = "1" ]; then
               rm -f "$CREDS_SOCK"
               mkdir -p "$CREDS_DIR"
-              ${final.systemd}/bin/systemd-run --user --unit="$CREDS_UNIT" --collect \
+              ${systemd-run} --user --unit="$CREDS_UNIT" --collect \
                 -- ${virtiofsd}/bin/virtiofsd \
                   --socket-path="$CREDS_SOCK" \
                   --shared-dir="$CREDS_DIR" \
@@ -229,12 +231,11 @@
             done
 
             # Run QEMU with corrected paths
-            # TODO: switch to lib.getExe for /bin/sed and /bin/microvm-run
-            bash <(${final.gnused}/bin/sed \
+            bash <(${lib.getExe final.gnused} \
               -e "s|/tmp/claude-vm-work|$WORK|g" \
               -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
               -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
-              ${runner}/bin/microvm-run)
+              ${lib.getExe runner})
           '';
       };
     }
