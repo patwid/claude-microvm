@@ -7,7 +7,12 @@
     microvm.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, microvm }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      microvm,
+    }:
     let
       inherit (nixpkgs) lib;
       eachDefaultSystem =
@@ -21,110 +26,119 @@
         system = "x86_64-linux";
         modules = [
           microvm.nixosModules.microvm
-          ({ pkgs, ... }: {
-            nixpkgs.config.allowUnfree = true;
+          (
+            { pkgs, ... }:
+            {
+              nixpkgs.config.allowUnfree = true;
 
-            networking.hostName = "claude-vm";
+              networking.hostName = "claude-vm";
 
-            virtualisation.docker = {
-              enable = true;
-              rootless = {
+              virtualisation.docker = {
                 enable = true;
-                setSocketVariable = true;
+                rootless = {
+                  enable = true;
+                  setSocketVariable = true;
+                };
               };
-            };
 
-            microvm = {
-              hypervisor = "qemu";
-              mem = 8192;
-              vcpu = 4;
+              microvm = {
+                hypervisor = "qemu";
+                mem = 8192;
+                vcpu = 4;
 
-              writableStoreOverlay = "/nix/.rw-store";
+                writableStoreOverlay = "/nix/.rw-store";
 
-              shares = [
-                {
-                  tag = "ro-store";
-                  source = "/nix/store";
-                  mountPoint = "/nix/.ro-store";
-                  proto = "9p";
-                }
-                {
-                  tag = "work";
-                  source = "/tmp/claude-vm-work";
-                  mountPoint = "/work";
-                  proto = "virtiofs";
-                }
-                {
-                  tag = "claude-credentials";
-                  # TODO: custom credentials home dir
-                  source = "/home/patwid/.claude-microvm";
-                  mountPoint = "/home/claude/.claude";
-                  proto = "virtiofs";
-                }
+                shares = [
+                  {
+                    tag = "ro-store";
+                    source = "/nix/store";
+                    mountPoint = "/nix/.ro-store";
+                    proto = "9p";
+                  }
+                  {
+                    tag = "work";
+                    source = "/tmp/claude-vm-work";
+                    mountPoint = "/work";
+                    proto = "virtiofs";
+                  }
+                  {
+                    tag = "claude-credentials";
+                    # TODO: custom credentials home dir
+                    source = "/home/patwid/.claude-microvm";
+                    mountPoint = "/home/claude/.claude";
+                    proto = "virtiofs";
+                  }
+                ];
+
+                qemu.extraArgs = [
+                  "-netdev"
+                  "user,id=usernet"
+                  "-device"
+                  "virtio-net-device,netdev=usernet"
+                ];
+              };
+
+              users.groups.claude.gid = 1000;
+              users.users.claude = {
+                isNormalUser = true;
+                uid = 1000;
+                group = "claude";
+                home = "/home/claude";
+                shell = pkgs.bash;
+              };
+
+              services.getty.autologinUser = "claude";
+
+              users.motd = "";
+
+              programs.bash.logout = ''
+                sudo poweroff
+              '';
+
+              security.sudo = {
+                enable = true;
+                extraRules = [
+                  {
+                    users = [ "claude" ];
+                    commands = [
+                      {
+                        command = "/run/current-system/sw/bin/poweroff";
+                        options = [ "NOPASSWD" ];
+                      }
+                    ];
+                  }
+                ];
+              };
+
+              environment.systemPackages = with pkgs; [
+                claude-code
+                git
+                openssh
+                cacert
               ];
 
-              qemu.extraArgs = [
-                "-netdev" "user,id=usernet"
-                "-device" "virtio-net-device,netdev=usernet"
+              environment.variables = {
+                SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+                COLORTERM = "truecolor";
+                CLAUDE_CONFIG_DIR = "/home/claude/.claude";
+              };
+
+              programs.bash.interactiveShellInit = ''
+                git config --global --add safe.directory /work 2>/dev/null || true
+                cd /work 2>/dev/null || true
+                claude --dangerously-skip-permissions; sudo poweroff
+              '';
+
+              systemd.tmpfiles.rules = [
+                "d /work 0755 claude claude -"
+                "d /home/claude/.claude 0700 claude claude -"
               ];
-            };
 
-            users.groups.claude.gid = 1000;
-            users.users.claude = {
-              isNormalUser = true;
-              uid = 1000;
-              group = "claude";
-              home = "/home/claude";
-              shell = pkgs.bash;
-            };
+              documentation.enable = false;
 
-            services.getty.autologinUser = "claude";
-
-            users.motd = "";
-
-            programs.bash.logout = ''
-              sudo poweroff
-            '';
-
-            security.sudo = {
-              enable = true;
-              extraRules = [{
-                users = [ "claude" ];
-                commands = [{
-                  command = "/run/current-system/sw/bin/poweroff";
-                  options = [ "NOPASSWD" ];
-                }];
-              }];
-            };
-
-            environment.systemPackages = with pkgs; [
-              claude-code
-              git
-              openssh
-              cacert
-            ];
-
-            environment.variables = {
-              SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
-              COLORTERM = "truecolor";
-              CLAUDE_CONFIG_DIR = "/home/claude/.claude";
-            };
-
-            programs.bash.interactiveShellInit = ''
-              git config --global --add safe.directory /work 2>/dev/null || true
-              cd /work 2>/dev/null || true
-              claude --dangerously-skip-permissions; sudo poweroff
-            '';
-
-            systemd.tmpfiles.rules = [
-              "d /work 0755 claude claude -"
-              "d /home/claude/.claude 0700 claude claude -"
-            ];
-
-            documentation.enable = false;
-
-            system.stateVersion = "25.05";
-          })
+              system.stateVersion = "25.05";
+            }
+          )
         ];
       };
 
@@ -133,8 +147,9 @@
           let
             inherit (final) virtiofsd;
             runner = self.nixosConfigurations.claude-vm.config.microvm.runner.qemu;
-          # TODO: writeShellApplication instead of writeShellScriptBin
-          in final.writeShellScriptBin "claude-run" ''
+            # TODO: writeShellApplication instead of writeShellScriptBin
+          in
+          final.writeShellScriptBin "claude-run" ''
             set -euo pipefail
             WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
             RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -220,7 +235,7 @@
               -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
               -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
               ${runner}/bin/microvm-run)
-          '';       
+          '';
       };
     }
     // eachDefaultSystem (
