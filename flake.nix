@@ -144,7 +144,7 @@
       overlays.default = final: prev: {
         claude-vm =
           let
-            runner = self.nixosConfigurations.claude-vm.config.microvm.runner.qemu;
+            inherit (self.nixosConfigurations.claude-vm.config.microvm) runner;
           in
           final.writeShellApplication {
             name = "claude-run";
@@ -225,7 +225,7 @@
                 -e "s|/tmp/claude-vm-config|$CONFIG|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$WORK_SOCK|g" \
                 -e "s|claude-vm-virtiofs-claude-config.sock|$CONFIG_SOCK|g" \
-                ${lib.getExe runner})
+                ${lib.getExe runner.qemu})
             '';
           };
       };
