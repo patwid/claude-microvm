@@ -250,12 +250,11 @@
           inherit system;
           overlays = builtins.attrValues self.overlays;
         };
-        inherit (pkgs) claude-vm;
       in
       {
         packages = {
-          default = claude-vm;
-          inherit claude-vm;
+          default = pkgs.claude-vm;
+          inherit (pkgs) claude-vm;
         };
 
         formatter = pkgs.nixfmt;
