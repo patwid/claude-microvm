@@ -218,7 +218,8 @@
                 [ -S "$sock" ] || { echo "error: virtiofsd socket $sock did not appear"; exit 1; }
               done
 
-              # Run QEMU with corrected paths
+              # Run QEMU in runtime dir so relative paths (e.g. QMP socket) don't pollute work dir
+              cd "$RUNTIME"
               bash <(sed \
                 -e "s|/tmp/claude-vm-work|$WORK|g" \
                 -e "s|/tmp/claude-vm-config|$CONFIG|g" \
