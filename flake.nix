@@ -62,9 +62,8 @@
                     proto = "virtiofs";
                   }
                   {
-                    tag = "claude-credentials";
-                    # TODO: custom credentials home dir
-                    source = "/home/patwid/.claude-microvm";
+                    tag = "claude-config";
+                    source = "/tmp/.claude-vm-config";
                     mountPoint = "/home/claude/.claude";
                     proto = "virtiofs";
                   }
@@ -164,10 +163,10 @@
               UNIT="claude-vm-virtiofsd-$ID"
               STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
 
-              CREDS_SOCK="$RUNTIME/claude-vm-creds-virtiofs-$ID.sock"
-              CREDS_UNIT="claude-vm-creds-virtiofsd-$ID"
-              CREDS_STATE="$RUNTIME/claude-vm-creds-virtiofsd-$ID.dir"
-              CREDS_DIR="$HOME/.claude-microvm"
+              CONFIG_SOCK="$RUNTIME/claude-vm-config-virtiofs-$ID.sock"
+              CONFIG_UNIT="claude-vm-config-virtiofsd-$ID"
+              CONFIG_STATE="$RUNTIME/claude-vm-config-virtiofsd-$ID.dir"
+              CONFIG="$(realpath "''${CONFIG_DIR:-$HOME/.claude-microvm}")"
 
               # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
               # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
@@ -203,29 +202,29 @@
                 echo "$WORK" > "$STATE"
               fi
 
-              # --- Credentials virtiofsd ---
-              NEED_START_CREDS=1
-              if systemctl --user is-active "$CREDS_UNIT" &>/dev/null; then
-                if [ -f "$CREDS_STATE" ] && [ "$(cat "$CREDS_STATE")" = "$CREDS_DIR" ] && [ -S "$CREDS_SOCK" ]; then
-                  NEED_START_CREDS=0
+              # --- Config virtiofsd ---
+              NEED_START_CONFIG=1
+              if systemctl --user is-active "$CONFIG_UNIT" &>/dev/null; then
+                if [ -f "$CONFIG_STATE" ] && [ "$(cat "$CONFIG_STATE")" = "$CONFIG" ] && [ -S "$CONFIG_SOCK" ]; then
+                  NEED_START_CONFIG=0
                 else
-                  systemctl --user stop "$CREDS_UNIT" 2>/dev/null || true
+                  systemctl --user stop "$CONFIG_UNIT" 2>/dev/null || true
                 fi
               fi
 
-              if [ "$NEED_START_CREDS" = "1" ]; then
-                rm -f "$CREDS_SOCK"
-                mkdir -p "$CREDS_DIR"
-                systemd-run --user --unit="$CREDS_UNIT" --collect \
+              if [ "$NEED_START_CONFIG" = "1" ]; then
+                rm -f "$CONFIG_SOCK"
+                mkdir -p "$CONFIG"
+                systemd-run --user --unit="$CONFIG_UNIT" --collect \
                   -- virtiofsd \
-                    --socket-path="$CREDS_SOCK" \
-                    --shared-dir="$CREDS_DIR" \
+                    --socket-path="$CONFIG_SOCK" \
+                    --shared-dir="$CONFIG" \
                     "''${VIRTIOFSD_COMMON[@]}"
-                echo "$CREDS_DIR" > "$CREDS_STATE"
+                echo "$CONFIG" > "$CONFIG_STATE"
               fi
 
               # Wait for both sockets
-              for sock in "$SOCK" "$CREDS_SOCK"; do
+              for sock in "$SOCK" "$CONFIG_SOCK"; do
                 for _ in $(seq 1 50); do
                   [ -S "$sock" ] && break
                   sleep 0.1
@@ -236,8 +235,9 @@
               # Run QEMU with corrected paths
               bash <(sed \
                 -e "s|/tmp/claude-vm-work|$WORK|g" \
+                -e "s|/tmp/claude-vm-config|$CONFIG|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
-                -e "s|claude-vm-virtiofs-claude-credentials.sock|$CREDS_SOCK|g" \
+                -e "s|claude-vm-virtiofs-claude-config.sock|$CONFIG_SOCK|g" \
                 ${lib.getExe runner})
             '';
           };
