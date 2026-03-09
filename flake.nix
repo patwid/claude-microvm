@@ -155,18 +155,19 @@
 
             text = ''
               set -euo pipefail
+
               WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
+              CONFIG="$(realpath "''${CONFIG_DIR:-$HOME/.claude-microvm}")"
               RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
               ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
 
-              SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
-              UNIT="claude-vm-virtiofsd-$ID"
-              STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
+              WORK_SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
+              WORK_UNIT="claude-vm-virtiofsd-$ID"
+              WORK_STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
 
               CONFIG_SOCK="$RUNTIME/claude-vm-config-virtiofs-$ID.sock"
               CONFIG_UNIT="claude-vm-config-virtiofsd-$ID"
               CONFIG_STATE="$RUNTIME/claude-vm-config-virtiofsd-$ID.dir"
-              CONFIG="$(realpath "''${CONFIG_DIR:-$HOME/.claude-microvm}")"
 
               # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
               # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
@@ -182,49 +183,34 @@
                 --xattr
               )
 
-              # --- Work virtiofsd ---
-              NEED_START_WORK=1
-              if systemctl --user is-active "$UNIT" &>/dev/null; then
-                if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
-                  NEED_START_WORK=0
-                else
-                  systemctl --user stop "$UNIT" 2>/dev/null || true
+              # Start (or reuse) a virtiofsd instance for a given directory.
+              # Args: $1=unit  $2=socket  $3=state-file  $4=shared-dir
+              ensure_virtiofsd() {
+                local unit=$1 sock=$2 state=$3 dir=$4
+                local need_start=1
+                if systemctl --user is-active "$unit" &>/dev/null; then
+                  if [ -f "$state" ] && [ "$(cat "$state")" = "$dir" ] && [ -S "$sock" ]; then
+                    need_start=0
+                  else
+                    systemctl --user stop "$unit" 2>/dev/null || true
+                  fi
                 fi
-              fi
-
-              if [ "$NEED_START_WORK" = "1" ]; then
-                rm -f "$SOCK"
-                systemd-run --user --unit="$UNIT" --collect \
-                  -- virtiofsd \
-                    --socket-path="$SOCK" \
-                    --shared-dir="$WORK" \
-                    "''${VIRTIOFSD_COMMON[@]}"
-                echo "$WORK" > "$STATE"
-              fi
-
-              # --- Config virtiofsd ---
-              NEED_START_CONFIG=1
-              if systemctl --user is-active "$CONFIG_UNIT" &>/dev/null; then
-                if [ -f "$CONFIG_STATE" ] && [ "$(cat "$CONFIG_STATE")" = "$CONFIG" ] && [ -S "$CONFIG_SOCK" ]; then
-                  NEED_START_CONFIG=0
-                else
-                  systemctl --user stop "$CONFIG_UNIT" 2>/dev/null || true
+                if [ "$need_start" = "1" ]; then
+                  rm -f "$sock"
+                  systemd-run --user --unit="$unit" --collect \
+                    -- virtiofsd \
+                      --socket-path="$sock" \
+                      --shared-dir="$dir" \
+                      "''${VIRTIOFSD_COMMON[@]}"
+                  echo "$dir" > "$state"
                 fi
-              fi
+              }
 
-              if [ "$NEED_START_CONFIG" = "1" ]; then
-                rm -f "$CONFIG_SOCK"
-                mkdir -p "$CONFIG"
-                systemd-run --user --unit="$CONFIG_UNIT" --collect \
-                  -- virtiofsd \
-                    --socket-path="$CONFIG_SOCK" \
-                    --shared-dir="$CONFIG" \
-                    "''${VIRTIOFSD_COMMON[@]}"
-                echo "$CONFIG" > "$CONFIG_STATE"
-              fi
+              ensure_virtiofsd "$WORK_UNIT" "$WORK_SOCK" "$WORK_STATE" "$WORK"
+              ensure_virtiofsd "$CONFIG_UNIT" "$CONFIG_SOCK" "$CONFIG_STATE" "$CONFIG"
 
               # Wait for both sockets
-              for sock in "$SOCK" "$CONFIG_SOCK"; do
+              for sock in "$WORK_SOCK" "$CONFIG_SOCK"; do
                 for _ in $(seq 1 50); do
                   [ -S "$sock" ] && break
                   sleep 0.1
@@ -236,7 +222,7 @@
               bash <(sed \
                 -e "s|/tmp/claude-vm-work|$WORK|g" \
                 -e "s|/tmp/claude-vm-config|$CONFIG|g" \
-                -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
+                -e "s|claude-vm-virtiofs-work.sock|$WORK_SOCK|g" \
                 -e "s|claude-vm-virtiofs-claude-config.sock|$CONFIG_SOCK|g" \
                 ${lib.getExe runner})
             '';
