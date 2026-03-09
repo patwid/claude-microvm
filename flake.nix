@@ -252,6 +252,7 @@
           default = claude-vm;
           inherit claude-vm;
         };
+
         formatter = pkgs.nixfmt;
       }
     );
