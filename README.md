@@ -66,13 +66,13 @@ Then `nix develop` gives you `microvm-run` in the shell.
 
 ### virtiofs (host directory sharing)
 
-The host `WORK_DIR` is shared into the VM at `/work` using virtiofs. A `virtiofsd` daemon is started automatically as a systemd user service (`claude-vm-virtiofsd-<id>`, where `<id>` is derived from the work directory path) — no root or sudo needed. It runs unprivileged in a user namespace with UID/GID translation so files created inside the VM are owned by your host user.
+The host `WORK_DIR` is shared into the VM at `/work` using virtiofs. A `virtiofsd` daemon is started automatically as a systemd user service (`claude-vm-work-virtiofsd-<id>`, where `<id>` is derived from the work directory path) — no root or sudo needed. It runs unprivileged in a user namespace with UID/GID translation so files created inside the VM are owned by your host user.
 
 Each work directory gets its own virtiofsd instance, so multiple VMs can run in parallel on different projects. The daemon persists between VM restarts for fast re-launches. Manage it with:
 
 ```sh
-systemctl --user list-units 'claude-vm-virtiofsd-*'
-systemctl --user stop claude-vm-virtiofsd-<id>
+systemctl --user list-units 'claude-vm-work-virtiofsd-*'
+systemctl --user stop claude-vm-work-virtiofsd-<id>
 ```
 
 ### Sandboxing

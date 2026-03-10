@@ -28,7 +28,7 @@ The entire project is a single Nix flake (`flake.nix`) — no application source
 ### Runtime flow
 
 1. `microvm-run` resolves `WORK_DIR`, derives a unique 8-char ID from its SHA256 hash.
-2. Starts (or reuses) a per-directory `virtiofsd` systemd user service (`claude-vm-virtiofsd-<id>`) with UID/GID mapping so VM files are owned by the host user.
+2. Starts (or reuses) a per-directory `virtiofsd` systemd user service (`claude-vm-work-virtiofsd-<id>`) with UID/GID mapping so VM files are owned by the host user.
 3. Patches and executes the microvm.nix-generated QEMU runner script, substituting the real work directory and socket path.
 4. VM boots → auto-login as `claude` → bash init runs `claude --dangerously-skip-permissions` → on exit, `sudo poweroff`.
 

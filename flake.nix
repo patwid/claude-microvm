@@ -161,9 +161,9 @@
               RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
               ID=$(echo -n "$WORK_DIR" | sha256sum | cut -c1-8)
 
-              WORK_SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
-              WORK_UNIT="claude-vm-virtiofsd-$ID"
-              WORK_STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
+              WORK_SOCK="$RUNTIME/claude-vm-work-virtiofs-$ID.sock"
+              WORK_UNIT="claude-vm-work-virtiofsd-$ID"
+              WORK_STATE="$RUNTIME/claude-vm-work-virtiofsd-$ID.workdir"
 
               CONFIG_SOCK="$RUNTIME/claude-vm-config-virtiofs-$ID.sock"
               CONFIG_UNIT="claude-vm-config-virtiofsd-$ID"
