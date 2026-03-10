@@ -22,129 +22,11 @@
         |> lib.foldAttrs lib.mergeAttrs { };
     in
     {
-      nixosConfigurations.claude-vm = lib.nixosSystem {
-        system = "aarch64-linux";
-        modules = [
-          microvm.nixosModules.microvm
-          (
-            { pkgs, ... }:
-            {
-              nixpkgs.config.allowUnfree = true;
-
-              networking.hostName = "claude-vm";
-
-              virtualisation.docker = {
-                enable = true;
-                rootless = {
-                  enable = true;
-                  setSocketVariable = true;
-                };
-              };
-
-              microvm = {
-                hypervisor = "qemu";
-                mem = 8192;
-                vcpu = 4;
-
-                writableStoreOverlay = "/nix/.rw-store";
-
-                shares = [
-                  {
-                    tag = "ro-store";
-                    source = "/nix/store";
-                    mountPoint = "/nix/.ro-store";
-                    proto = "9p";
-                  }
-                  {
-                    tag = "work";
-                    source = "/tmp/claude-vm-work";
-                    mountPoint = "/work";
-                    proto = "virtiofs";
-                  }
-                  {
-                    tag = "claude-config";
-                    source = "/tmp/.claude-vm-config";
-                    mountPoint = "/home/claude/.claude";
-                    proto = "virtiofs";
-                  }
-                ];
-
-                qemu.extraArgs = [
-                  "-netdev"
-                  "user,id=usernet"
-                  "-device"
-                  "virtio-net-device,netdev=usernet"
-                ];
-              };
-
-              users.groups.claude.gid = 1000;
-              users.users.claude = {
-                isNormalUser = true;
-                uid = 1000;
-                group = "claude";
-                home = "/home/claude";
-                shell = pkgs.bash;
-              };
-
-              services.getty.autologinUser = "claude";
-
-              users.motd = "";
-
-              programs.bash.logout = ''
-                sudo poweroff
-              '';
-
-              security.sudo = {
-                enable = true;
-                extraRules = [
-                  {
-                    users = [ "claude" ];
-                    commands = [
-                      {
-                        command = "/run/current-system/sw/bin/poweroff";
-                        options = [ "NOPASSWD" ];
-                      }
-                    ];
-                  }
-                ];
-              };
-
-              environment.systemPackages = with pkgs; [
-                claude-code
-                git
-                openssh
-                cacert
-              ];
-
-              environment.variables = {
-                SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
-                COLORTERM = "truecolor";
-                CLAUDE_CONFIG_DIR = "/home/claude/.claude";
-              };
-
-              programs.bash.interactiveShellInit = ''
-                git config --global --add safe.directory /work 2>/dev/null || true
-                cd /work 2>/dev/null || true
-                claude --dangerously-skip-permissions; sudo poweroff
-              '';
-
-              systemd.tmpfiles.rules = [
-                "d /work 0755 claude claude -"
-                "d /home/claude/.claude 0700 claude claude -"
-              ];
-
-              documentation.enable = false;
-
-              system.stateVersion = "25.05";
-            }
-          )
-        ];
-      };
-
       overlays.default = final: prev: {
         claude-vm =
           let
-            inherit (self.nixosConfigurations.claude-vm.config.microvm) runner;
+            inherit (final.stdenv.hostPlatform) system;
+            inherit (self.nixosConfigurations.${system}.config.microvm) runner;
           in
           final.writeShellApplication {
             name = "claude-run";
@@ -235,6 +117,125 @@
         };
       in
       {
+        nixosConfigurations = lib.nixosSystem {
+          inherit system;
+          modules = [
+            microvm.nixosModules.microvm
+            (
+              { pkgs, ... }:
+              {
+                nixpkgs.config.allowUnfree = true;
+
+                networking.hostName = "claude-vm";
+
+                virtualisation.docker = {
+                  enable = true;
+                  rootless = {
+                    enable = true;
+                    setSocketVariable = true;
+                  };
+                };
+
+                microvm = {
+                  hypervisor = "qemu";
+                  mem = 8192;
+                  vcpu = 4;
+
+                  writableStoreOverlay = "/nix/.rw-store";
+
+                  shares = [
+                    {
+                      tag = "ro-store";
+                      source = "/nix/store";
+                      mountPoint = "/nix/.ro-store";
+                      proto = "9p";
+                    }
+                    {
+                      tag = "work";
+                      source = "/tmp/claude-vm-work";
+                      mountPoint = "/work";
+                      proto = "virtiofs";
+                    }
+                    {
+                      tag = "claude-config";
+                      source = "/tmp/.claude-vm-config";
+                      mountPoint = "/home/claude/.claude";
+                      proto = "virtiofs";
+                    }
+                  ];
+
+                  qemu.extraArgs = [
+                    "-netdev"
+                    "user,id=usernet"
+                    "-device"
+                    "virtio-net-device,netdev=usernet"
+                  ];
+                };
+
+                users.groups.claude.gid = 1000;
+                users.users.claude = {
+                  isNormalUser = true;
+                  uid = 1000;
+                  group = "claude";
+                  home = "/home/claude";
+                  shell = pkgs.bash;
+                };
+
+                services.getty.autologinUser = "claude";
+
+                users.motd = "";
+
+                programs.bash.logout = ''
+                  sudo poweroff
+                '';
+
+                security.sudo = {
+                  enable = true;
+                  extraRules = [
+                    {
+                      users = [ "claude" ];
+                      commands = [
+                        {
+                          command = "/run/current-system/sw/bin/poweroff";
+                          options = [ "NOPASSWD" ];
+                        }
+                      ];
+                    }
+                  ];
+                };
+
+                environment.systemPackages = with pkgs; [
+                  claude-code
+                  git
+                  openssh
+                  cacert
+                ];
+
+                environment.variables = {
+                  SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
+                  COLORTERM = "truecolor";
+                  CLAUDE_CONFIG_DIR = "/home/claude/.claude";
+                };
+
+                programs.bash.interactiveShellInit = ''
+                  git config --global --add safe.directory /work 2>/dev/null || true
+                  cd /work 2>/dev/null || true
+                  claude --dangerously-skip-permissions; sudo poweroff
+                '';
+
+                systemd.tmpfiles.rules = [
+                  "d /work 0755 claude claude -"
+                  "d /home/claude/.claude 0700 claude claude -"
+                ];
+
+                documentation.enable = false;
+
+                system.stateVersion = "25.05";
+              }
+            )
+          ];
+        };
+
         packages = {
           default = pkgs.claude-vm;
           inherit (pkgs) claude-vm;
