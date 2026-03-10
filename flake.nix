@@ -169,20 +169,6 @@
               CONFIG_UNIT="claude-vm-config-virtiofsd-$ID"
               CONFIG_STATE="$RUNTIME/claude-vm-config-virtiofsd-$ID.dir"
 
-              # Common virtiofsd flags (unprivileged user namespace, UID/GID mapping)
-              # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
-              # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
-              # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
-              VIRTIOFSD_COMMON=(
-                --sandbox=namespace
-                --uid-map ":0:$(id -u):1:"
-                --gid-map ":0:$(id -g):1:"
-                --translate-uid "map:1000:0:1"
-                --translate-gid "map:1000:0:1"
-                --socket-group="$(id -gn)"
-                --xattr
-              )
-
               # Start (or reuse) a virtiofsd instance for a given directory.
               # Args: $1=unit  $2=socket  $3=state-file  $4=shared-dir
               ensure_virtiofsd() {
@@ -197,11 +183,20 @@
                 fi
                 if [ "$need_start" = "1" ]; then
                   rm -f "$sock"
+                  # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).                                                                                                                                            
+                  # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)                                                                                                                      
+                  # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)    
                   systemd-run --user --unit="$unit" --collect \
                     -- virtiofsd \
                       --socket-path="$sock" \
                       --shared-dir="$dir" \
-                      "''${VIRTIOFSD_COMMON[@]}"
+                      --sandbox=namespace \
+                      --uid-map ":0:$(id -u):1:" \
+                      --gid-map ":0:$(id -g):1:" \
+                      --translate-uid "map:1000:0:1" \
+                      --translate-gid "map:1000:0:1" \
+                      --socket-group="$(id -gn)" \
+                      --xattr
                   echo "$dir" > "$state"
                 fi
               }
