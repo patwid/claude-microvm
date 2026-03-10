@@ -102,7 +102,7 @@
                 -e "s|/tmp/claude-vm-work|$WORK_DIR|g" \
                 -e "s|/tmp/claude-vm-config|$CONFIG_DIR|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$WORK_SOCK|g" \
-                -e "s|claude-vm-virtiofs-claude-config.sock|$CONFIG_SOCK|g" \
+                -e "s|claude-vm-virtiofs-config.sock|$CONFIG_SOCK|g" \
                 ${lib.getExe runner.qemu})
             '';
           };
@@ -157,7 +157,7 @@
                       proto = "virtiofs";
                     }
                     {
-                      tag = "claude-config";
+                      tag = "config";
                       source = "/tmp/.claude-vm-config";
                       mountPoint = "/home/claude/.claude";
                       proto = "virtiofs";
