@@ -1,6 +1,4 @@
 {
-  description = "Claude Code microVM";
-
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     microvm.url = "github:microvm-nix/microvm.nix";
