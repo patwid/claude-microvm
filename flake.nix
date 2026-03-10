@@ -33,6 +33,7 @@
             runtimeInputs = with final; [
               systemd
               virtiofsd
+              runner.qemu
             ];
 
             text = ''
@@ -103,7 +104,7 @@
                 -e "s|/tmp/claude-vm-config|$CONFIG_DIR|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$WORK_SOCK|g" \
                 -e "s|claude-vm-virtiofs-config.sock|$CONFIG_SOCK|g" \
-                ${lib.getExe runner.qemu})
+                "$(command -v microvm-run)")
             '';
           };
       };
