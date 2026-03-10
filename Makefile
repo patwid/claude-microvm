@@ -7,7 +7,7 @@ WORK_DIR ?= $(shell pwd)
 .PHONY: vm vm.run
 
 vm:
-	nix build $(NIX_FLAGS) .#vm
+	nix build $(NIX_FLAGS) .#claude-vm
 
 vm.run: vm
-	WORK_DIR=$(WORK_DIR) ./result/bin/microvm-run
+	WORK_DIR=$(WORK_DIR) ./result/bin/claude-run
