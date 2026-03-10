@@ -23,7 +23,7 @@
     in
     {
       nixosConfigurations.claude-vm = lib.nixosSystem {
-        system = "x86_64-linux";
+        system = "aarch64-linux";
         modules = [
           microvm.nixosModules.microvm
           (
@@ -156,10 +156,10 @@
             text = ''
               set -euo pipefail
 
-              WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
-              CONFIG="$(realpath "''${CONFIG_DIR:-$HOME/.claude-microvm}")"
+              WORK_DIR="$(realpath "''${WORK_DIR:-$(pwd)}")"
+              CONFIG_DIR="$(realpath "''${CONFIG_DIR:-$HOME/.claude-microvm}")"
               RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
-              ID=$(echo -n "$WORK" | sha256sum | cut -c1-8)
+              ID=$(echo -n "$WORK_DIR" | sha256sum | cut -c1-8)
 
               WORK_SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
               WORK_UNIT="claude-vm-virtiofsd-$ID"
@@ -183,6 +183,7 @@
                 fi
                 if [ "$need_start" = "1" ]; then
                   rm -f "$sock"
+                  mkdir -p "$dir"
                   # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).                                                                                                                                            
                   # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)                                                                                                                      
                   # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)    
@@ -201,8 +202,8 @@
                 fi
               }
 
-              ensure_virtiofsd "$WORK_UNIT" "$WORK_SOCK" "$WORK_STATE" "$WORK"
-              ensure_virtiofsd "$CONFIG_UNIT" "$CONFIG_SOCK" "$CONFIG_STATE" "$CONFIG"
+              ensure_virtiofsd "$WORK_UNIT" "$WORK_SOCK" "$WORK_STATE" "$WORK_DIR"
+              ensure_virtiofsd "$CONFIG_UNIT" "$CONFIG_SOCK" "$CONFIG_STATE" "$CONFIG_DIR"
 
               # Wait for both sockets
               for sock in "$WORK_SOCK" "$CONFIG_SOCK"; do
@@ -216,8 +217,8 @@
               # Run QEMU in runtime dir so relative paths (e.g. QMP socket) don't pollute work dir
               cd "$RUNTIME"
               bash <(sed \
-                -e "s|/tmp/claude-vm-work|$WORK|g" \
-                -e "s|/tmp/claude-vm-config|$CONFIG|g" \
+                -e "s|/tmp/claude-vm-work|$WORK_DIR|g" \
+                -e "s|/tmp/claude-vm-config|$CONFIG_DIR|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$WORK_SOCK|g" \
                 -e "s|claude-vm-virtiofs-claude-config.sock|$CONFIG_SOCK|g" \
                 ${lib.getExe runner.qemu})
