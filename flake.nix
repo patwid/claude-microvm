@@ -137,7 +137,7 @@
 
                 microvm = {
                   hypervisor = "qemu";
-                  mem = 8192;
+                  mem = 16384;
                   vcpu = 4;
 
                   writableStoreOverlay = "/nix/.rw-store";
