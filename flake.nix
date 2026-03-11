@@ -24,14 +24,14 @@
         claude-vm =
           let
             inherit (final.stdenv.hostPlatform) system;
-            inherit (self.nixosConfigurations.${system}.config.microvm) runner;
+            inherit (self.nixosConfigurations.${system}.config.microvm) declaredRunner;
           in
           final.writeShellApplication {
             name = "claude-run";
             runtimeInputs = with final; [
               systemd
               virtiofsd
-              runner.qemu
+              declaredRunner
             ];
 
             text = ''
@@ -127,6 +127,11 @@
 
                 networking.hostName = "claude-vm";
 
+                networking.firewall.extraCommands = ''
+                  iptables -A OUTPUT -d 10.0.2.2 -j REJECT
+                  iptables -A OUTPUT -d 10.0.2.0/24 -j REJECT
+                '';
+
                 virtualisation.docker = {
                   enable = true;
                   rootless = {
@@ -145,7 +150,7 @@
                     {
                       image = "nix-store-overlay.img";
                       mountPoint = config.microvm.writableStoreOverlay;
-                      size = 16384;
+                      size = 8192;
                     }
                   ];
 
