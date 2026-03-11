@@ -121,7 +121,7 @@
           modules = [
             microvm.nixosModules.microvm
             (
-              { pkgs, ... }:
+              { config, pkgs, ... }:
               {
                 nixpkgs.config.allowUnfree = true;
 
@@ -141,6 +141,11 @@
                   vcpu = 4;
 
                   writableStoreOverlay = "/nix/.rw-store";
+                  volumes = [ {
+                    image = "nix-store-overlay.img";
+                    mountPoint = config.microvm.writableStoreOverlay;
+                    size = 8192;
+                  } ];
 
                   shares = [
                     {
