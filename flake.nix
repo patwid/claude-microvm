@@ -144,7 +144,7 @@
                   volumes = [ {
                     image = "nix-store-overlay.img";
                     mountPoint = config.microvm.writableStoreOverlay;
-                    size = 8192;
+                    size = 16384;
                   } ];
 
                   shares = [
