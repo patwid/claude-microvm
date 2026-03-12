@@ -127,11 +127,6 @@
 
                 networking.hostName = "claude-vm";
 
-                networking.firewall.extraCommands = ''
-                  iptables -A OUTPUT -d 10.0.2.2 -j REJECT
-                  iptables -A OUTPUT -d 10.0.2.0/24 -j REJECT
-                '';
-
                 virtualisation.docker = {
                   enable = true;
                   rootless = {
