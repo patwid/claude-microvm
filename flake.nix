@@ -138,16 +138,9 @@
                 microvm = {
                   hypervisor = "qemu";
                   mem = 16384;
-                  vcpu = 4;
+                  vcpu = 8;
 
                   writableStoreOverlay = "/nix/.rw-store";
-                  volumes = [
-                    {
-                      image = "nix-store-overlay.img";
-                      mountPoint = config.microvm.writableStoreOverlay;
-                      size = 8192;
-                    }
-                  ];
 
                   shares = [
                     {
