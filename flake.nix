@@ -67,19 +67,21 @@
                     --socket-group="$(id -gn)" \
                     --xattr
 
-                for _ in $(seq 1 50); do
+                local i=0
+                while [ "$i" -lt 50 ]; do
                   [ -S "$sock" ] && break
                   sleep 0.1
+                  i=$((i + 1))
                 done
                 [ -S "$sock" ] || { echo "error: $label virtiofsd socket did not appear"; exit 1; }
               }
 
               cleanup() {
-                for u in "''${UNITS[@]:-}"; do
-                  [ -n "$u" ] && systemctl --user stop "$u" 2>/dev/null || true
+                for u in "''${UNITS[@]+"''${UNITS[@]}"}"; do
+                  systemctl --user stop "$u" 2>/dev/null || true
                 done
-                for s in "''${SOCKETS[@]:-}"; do
-                  [ -n "$s" ] && rm -f "$s"
+                for s in "''${SOCKETS[@]+"''${SOCKETS[@]}"}"; do
+                  rm -f "$s"
                 done
               }
               trap cleanup EXIT INT TERM
@@ -95,17 +97,20 @@
                 WORK_HASH="$(echo -n "$WORK" | sha256sum | cut -c1-12)"
                 CLAUDE_HOME="$DATA_HOME/claude-microvm/$WORK_HASH"
               fi
-              CLAUDE_DIR="$(realpath "$CLAUDE_HOME" 2>/dev/null || echo "$CLAUDE_HOME")"
-              if [ ! -d "$CLAUDE_DIR" ]; then
-                mkdir -p "$CLAUDE_DIR"
-              fi
+              mkdir -p "$CLAUDE_HOME"
+              CLAUDE_DIR="$(realpath "$CLAUDE_HOME")"
 
               CLAUDE_SOCK="$RUNTIME/claude-vm-virtiofs-$ID-claude-home.sock"
               CLAUDE_UNIT="claude-vm-virtiofsd-$ID-claude-home"
               start_virtiofsd "$CLAUDE_UNIT" "$CLAUDE_SOCK" "$CLAUDE_DIR" "claude-home"
 
               # Write host env vars for the VM
-              echo "DIRENV_ALLOW=''${DIRENV_ALLOW:-0}" > "$CLAUDE_DIR/.microvm-env"
+              write_vm_env() {
+                cat > "$CLAUDE_DIR/.microvm-env" <<ENVEOF
+DIRENV_ALLOW=''${DIRENV_ALLOW:-0}
+ENVEOF
+              }
+              write_vm_env
 
               # Pre-cache dev shell environment on host (fast) so the VM doesn't have to evaluate nix
               if [ "''${DIRENV_ALLOW:-0}" = "1" ] && [ -f "$WORK/flake.nix" ]; then
