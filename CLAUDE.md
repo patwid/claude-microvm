@@ -9,7 +9,7 @@ claude-microvm runs Claude Code inside an isolated NixOS microVM (QEMU+KVM) usin
 ## Build & Run Commands
 
 ```sh
-make vm          # Build the VM image (nix build --impure .#vm)
+make vm          # Build the VM image (nix build --impure .#claude-vm)
 make vm.run      # Build and run with current directory mounted at /work
 WORK_DIR=/path/to/project make vm.run  # Mount a specific directory
 ```
@@ -23,12 +23,12 @@ The entire project is a single Nix flake (`flake.nix`) — no application source
 ### Flake structure
 
 - **NixOS configuration** (`nixosConfigurations.claude-vm`): Defines the VM's OS — user account (`claude`, uid 1000), packages (claude-code, git, openssh, cacert), auto-login, shell init, and sudoers (passwordless `poweroff` only).
-- **Package output** (`packages.x86_64-linux.vm`): A `writeShellScriptBin "microvm-run"` wrapper that manages virtiofsd and launches QEMU.
+- **Package output** (`packages.x86_64-linux.claude-vm`): A `writeShellApplication "claude-run"` wrapper that manages virtiofsd and launches QEMU.
 
 ### Runtime flow
 
-1. `microvm-run` resolves `WORK_DIR`, derives a unique 8-char ID from its SHA256 hash.
-2. Starts (or reuses) a per-directory `virtiofsd` systemd user service (`claude-vm-work-virtiofsd-<id>`) with UID/GID mapping so VM files are owned by the host user.
+1. `claude-run` resolves `WORK_DIR`, generates a unique UUID for this run.
+2. Starts two `virtiofsd` systemd user services (work share + claude-home share) with UID/GID mapping so VM files are owned by the host user.
 3. Patches and executes the microvm.nix-generated QEMU runner script, substituting the real work directory and socket path.
 4. VM boots → auto-login as `claude` → bash init runs `claude --dangerously-skip-permissions` → on exit, `sudo poweroff`.
 

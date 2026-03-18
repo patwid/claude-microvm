@@ -50,7 +50,7 @@ WORK_DIR=. nix run github:systemstart/claude-microvm
 nix profile install github:systemstart/claude-microvm
 
 # Now available everywhere
-WORK_DIR=/path/to/project microvm-run
+WORK_DIR=/path/to/project claude-run
 ```
 
 ### As a flake input
@@ -64,19 +64,19 @@ Add as a dependency in another project's `flake.nix`:
   outputs = { nixpkgs, claude-vm, ... }:
     let system = "x86_64-linux"; in {
       devShells.${system}.default = nixpkgs.legacyPackages.${system}.mkShell {
-        packages = [ claude-vm.packages.${system}.vm ];
+        packages = [ claude-vm.packages.${system}.claude-vm ];
       };
     };
 }
 ```
 
-Then `nix develop` gives you `microvm-run` in the shell.
+Then `nix develop` gives you `claude-run` in the shell.
 
 ## How it works
 
 ### virtiofs (host directory sharing)
 
-The host `WORK_DIR` is shared into the VM at `/work` using virtiofs. A `virtiofsd` daemon is started automatically as a systemd user service (`claude-vm-virtiofsd-<id>`, where `<id>` is derived from the work directory path) — no root or sudo needed. It runs unprivileged in a user namespace with UID/GID translation so files created inside the VM are owned by your host user.
+The host `WORK_DIR` is shared into the VM at `/work` using virtiofs. A `virtiofsd` daemon is started automatically as a systemd user service (`claude-vm-virtiofsd-<uuid>`) — no root or sudo needed. It runs unprivileged in a user namespace with UID/GID translation so files created inside the VM are owned by your host user.
 
 Each work directory gets its own virtiofsd instance, so multiple VMs can run in parallel on different projects. Multiple VMs on the **same** project also work automatically — each launch gets a random instance ID with its own virtiofsd daemons and sockets.
 

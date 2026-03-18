@@ -41,31 +41,24 @@
               RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
               ID="$(cat /proc/sys/kernel/random/uuid)"
 
-              # --- Work share (virtiofsd) ---
-              SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
-              UNIT="claude-vm-virtiofsd-$ID"
-              STATE="$RUNTIME/claude-vm-virtiofsd-$ID.workdir"
+              # --- virtiofsd helper ---
+              # Starts a virtiofsd instance as a systemd user service.
+              # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
+              # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
+              # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
+              UNITS=()
+              SOCKETS=()
+              start_virtiofsd() {
+                local unit="$1" sock="$2" shared_dir="$3" label="$4"
+                UNITS+=("$unit")
+                SOCKETS+=("$sock")
 
-              # (Re)start virtiofsd if not running or WORK_DIR changed
-              NEED_START=1
-              if systemctl --user is-active "$UNIT" &>/dev/null; then
-                if [ -f "$STATE" ] && [ "$(cat "$STATE")" = "$WORK" ] && [ -S "$SOCK" ]; then
-                  NEED_START=0
-                else
-                  systemctl --user stop "$UNIT" 2>/dev/null || true
-                fi
-              fi
+                rm -f "$sock"
 
-              if [ "$NEED_START" = "1" ]; then
-                rm -f "$SOCK"
-
-                # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
-                # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
-                # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
-                systemd-run --user --unit="$UNIT" --collect \
+                systemd-run --user --unit="$unit" --collect \
                   -- virtiofsd \
-                    --socket-path="$SOCK" \
-                    --shared-dir="$WORK" \
+                    --socket-path="$sock" \
+                    --shared-dir="$shared_dir" \
                     --sandbox=namespace \
                     --uid-map ":0:$(id -u):1:" \
                     --gid-map ":0:$(id -g):1:" \
@@ -74,21 +67,29 @@
                     --socket-group="$(id -gn)" \
                     --xattr
 
-                echo "$WORK" > "$STATE"
-
-                # Wait for socket
                 for _ in $(seq 1 50); do
-                  [ -S "$SOCK" ] && break
+                  [ -S "$sock" ] && break
                   sleep 0.1
                 done
-                [ -S "$SOCK" ] || { echo "error: virtiofsd socket did not appear"; exit 1; }
-              fi
+                [ -S "$sock" ] || { echo "error: $label virtiofsd socket did not appear"; exit 1; }
+              }
 
-              # --- Claude home share (virtiofsd) ---
-              CLAUDE_SOCK="$RUNTIME/claude-vm-virtiofs-$ID-claude-home.sock"
-              CLAUDE_UNIT="claude-vm-virtiofsd-$ID-claude-home"
-              CLAUDE_STATE="$RUNTIME/claude-vm-virtiofsd-$ID-claude-home.dir"
+              cleanup() {
+                for u in "''${UNITS[@]:-}"; do
+                  [ -n "$u" ] && systemctl --user stop "$u" 2>/dev/null || true
+                done
+                for s in "''${SOCKETS[@]:-}"; do
+                  [ -n "$s" ] && rm -f "$s"
+                done
+              }
+              trap cleanup EXIT INT TERM
 
+              # --- Work share ---
+              SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
+              UNIT="claude-vm-virtiofsd-$ID"
+              start_virtiofsd "$UNIT" "$SOCK" "$WORK" "work"
+
+              # --- Claude home share ---
               if [ -z "''${CLAUDE_HOME:-}" ]; then
                 DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
                 WORK_HASH="$(echo -n "$WORK" | sha256sum | cut -c1-12)"
@@ -98,50 +99,10 @@
               if [ ! -d "$CLAUDE_DIR" ]; then
                 mkdir -p "$CLAUDE_DIR"
               fi
-              CLAUDE_TEMP=""
 
-              cleanup() {
-                systemctl --user stop "$UNIT" 2>/dev/null || true
-                systemctl --user stop "$CLAUDE_UNIT" 2>/dev/null || true
-                rm -f "$SOCK" "$CLAUDE_SOCK" "$STATE" "$CLAUDE_STATE"
-                if [ -n "$CLAUDE_TEMP" ]; then
-                  rm -rf "$CLAUDE_TEMP"
-                fi
-              }
-              trap cleanup EXIT
-
-              CLAUDE_NEED_START=1
-              if systemctl --user is-active "$CLAUDE_UNIT" &>/dev/null; then
-                if [ -f "$CLAUDE_STATE" ] && [ "$(cat "$CLAUDE_STATE")" = "$CLAUDE_DIR" ] && [ -S "$CLAUDE_SOCK" ]; then
-                  CLAUDE_NEED_START=0
-                else
-                  systemctl --user stop "$CLAUDE_UNIT" 2>/dev/null || true
-                fi
-              fi
-
-              if [ "$CLAUDE_NEED_START" = "1" ]; then
-                rm -f "$CLAUDE_SOCK"
-
-                systemd-run --user --unit="$CLAUDE_UNIT" --collect \
-                  -- virtiofsd \
-                    --socket-path="$CLAUDE_SOCK" \
-                    --shared-dir="$CLAUDE_DIR" \
-                    --sandbox=namespace \
-                    --uid-map ":0:$(id -u):1:" \
-                    --gid-map ":0:$(id -g):1:" \
-                    --translate-uid "map:1000:0:1" \
-                    --translate-gid "map:1000:0:1" \
-                    --socket-group="$(id -gn)" \
-                    --xattr
-
-                echo "$CLAUDE_DIR" > "$CLAUDE_STATE"
-
-                for _ in $(seq 1 50); do
-                  [ -S "$CLAUDE_SOCK" ] && break
-                  sleep 0.1
-                done
-                [ -S "$CLAUDE_SOCK" ] || { echo "error: claude-home virtiofsd socket did not appear"; exit 1; }
-              fi
+              CLAUDE_SOCK="$RUNTIME/claude-vm-virtiofs-$ID-claude-home.sock"
+              CLAUDE_UNIT="claude-vm-virtiofsd-$ID-claude-home"
+              start_virtiofsd "$CLAUDE_UNIT" "$CLAUDE_SOCK" "$CLAUDE_DIR" "claude-home"
 
               # Write host env vars for the VM
               echo "DIRENV_ALLOW=''${DIRENV_ALLOW:-0}" > "$CLAUDE_DIR/.microvm-env"
