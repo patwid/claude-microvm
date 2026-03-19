@@ -129,7 +129,8 @@ ENVEOF
                 fi
               fi
 
-              # Run QEMU with corrected paths
+              # Run QEMU in runtime dir so relative paths (e.g. QMP socket) don't pollute work dir
+              cd "$RUNTIME"
               bash <(sed \
                 -e "s|/tmp/claude-vm-work|$WORK|g" \
                 -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
