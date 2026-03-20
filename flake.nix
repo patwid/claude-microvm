@@ -202,6 +202,7 @@ ENVEOF
                   isNormalUser = true;
                   uid = 1000;
                   group = "claude";
+                  extraGroups = [ "docker" ];
                   home = "/home/claude";
                   shell = pkgs.bash;
                 };
