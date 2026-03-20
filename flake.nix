@@ -273,7 +273,9 @@ ENVEOF
                   # Remove disableBypassPermissionsMode so --dangerously-skip-permissions works
                   _SETTINGS="/work/.claude/settings.json"
                   _restore_settings() {
+                    echo "restoring settings, if available"
                     if [ -f "$_SETTINGS.bak" ]; then
+                      echo "restoring settings"
                       mv "$_SETTINGS.bak" "$_SETTINGS"
                       sync
                     fi
@@ -286,7 +288,6 @@ ENVEOF
 
                   echo "starting claude ..."
                   claude --dangerously-skip-permissions
-
                   _restore_settings
                   sudo poweroff
                 '';
