@@ -32,6 +32,7 @@
               systemd
               virtiofsd
               declaredRunner
+              jq
             ];
 
             text = ''
@@ -77,6 +78,10 @@
               }
 
               cleanup() {
+                # Restore settings.json before stopping virtiofsd
+                if [ -f "$WORK/.claude/settings.json.bak" ]; then
+                  mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
+                fi
                 for u in "''${UNITS[@]+"''${UNITS[@]}"}"; do
                   systemctl --user stop "$u" 2>/dev/null || true
                 done
@@ -85,6 +90,13 @@
                 done
               }
               trap cleanup EXIT INT TERM
+
+              # --- Patch settings.json on host (restored in cleanup) ---
+              _SETTINGS="$WORK/.claude/settings.json"
+              if [ -f "$_SETTINGS" ]; then
+                cp "$_SETTINGS" "$_SETTINGS.bak"
+                jq 'del(.permissions.disableBypassPermissionsMode)' "$_SETTINGS.bak" > "$_SETTINGS"
+              fi
 
               # --- Work share ---
               SOCK="$RUNTIME/claude-vm-virtiofs-$ID.sock"
@@ -270,26 +282,8 @@ ENVEOF
                       eval "$(direnv export bash 2>/dev/null)" || true
                     fi
                   fi
-                  # Remove disableBypassPermissionsMode so --dangerously-skip-permissions works
-                  _SETTINGS="/work/.claude/settings.json"
-                  _restore_settings() {
-                    echo "restoring settings, if available"
-                    if [ -f "$_SETTINGS.bak" ]; then
-                      echo "restoring settings"
-                      mv "$_SETTINGS.bak" "$_SETTINGS"
-                      sync
-                    fi
-                  }
-                  if [ -f "$_SETTINGS" ]; then
-                    cp "$_SETTINGS" "$_SETTINGS.bak"
-                    jq 'del(.permissions.disableBypassPermissionsMode)' "$_SETTINGS.bak" > "$_SETTINGS"
-                  fi
-                  trap _restore_settings EXIT INT TERM
-
                   echo "starting claude ..."
-                  claude --dangerously-skip-permissions
-                  _restore_settings
-                  sudo poweroff
+                  claude --dangerously-skip-permissions; sudo poweroff
                 '';
 
                 systemd.tmpfiles.rules = [
