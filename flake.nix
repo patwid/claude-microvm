@@ -241,13 +241,7 @@ ENVEOF
                   nix-direnv.enable = true;
                 };
 
-                virtualisation.docker = {
-                  enable = true;
-                  rootless = {
-                    enable = true;
-                    setSocketVariable = true;
-                  };
-                };
+                virtualisation.docker.enable = true;
 
                 environment.variables = {
                   SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
