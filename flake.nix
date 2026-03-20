@@ -115,11 +115,6 @@
               CLAUDE_UNIT="claude-vm-virtiofsd-$ID-claude-home"
               start_virtiofsd "$CLAUDE_UNIT" "$CLAUDE_SOCK" "$CLAUDE_DIR" "claude-home"
 
-              # --- Gradle cache share (9p, read-only via overlay) ---
-              GRADLE_HOST="''${GRADLE_USER_HOME:-$HOME/.gradle}/caches"
-              mkdir -p "$GRADLE_HOST"
-              GRADLE_DIR="$(realpath "$GRADLE_HOST")"
-
               # Write host env vars for the VM
               write_vm_env() {
                 cat > "$CLAUDE_DIR/.microvm-env" <<ENVEOF
@@ -152,7 +147,6 @@ ENVEOF
                 -e "s|claude-vm-virtiofs-work.sock|$SOCK|g" \
                 -e "s|/tmp/claude-vm-home|$CLAUDE_DIR|g" \
                 -e "s|claude-vm-virtiofs-claude-home.sock|$CLAUDE_SOCK|g" \
-                -e "s|/tmp/claude-vm-gradle-caches|$GRADLE_DIR|g" \
                 "$(command -v microvm-run)")
             '';
           };
@@ -204,12 +198,6 @@ ENVEOF
                       source = "/tmp/claude-vm-home";
                       mountPoint = "/home/claude";
                       proto = "virtiofs";
-                    }
-                    {
-                      tag = "gradle-cache";
-                      source = "/tmp/claude-vm-gradle-caches";
-                      mountPoint = "/home/claude/.gradle-caches-ro";
-                      proto = "9p";
                     }
                   ];
 
@@ -298,24 +286,8 @@ ENVEOF
                   claude --dangerously-skip-permissions; sudo poweroff
                 '';
 
-                fileSystems."/home/claude/.gradle/caches" = {
-                  device = "overlay";
-                  fsType = "overlay";
-                  options = [
-                    "lowerdir=/home/claude/.gradle-caches-ro"
-                    "upperdir=/tmp/gradle-rw/upper"
-                    "workdir=/tmp/gradle-rw/work"
-                  ];
-                  depends = [ "/home/claude/.gradle-caches-ro" ];
-                };
-
                 systemd.tmpfiles.rules = [
                   "d /work 0755 claude claude -"
-                  "d /home/claude/.gradle-caches-ro 0755 claude claude -"
-                  "d /home/claude/.gradle 0755 claude claude -"
-                  "d /home/claude/.gradle/caches 0755 claude claude -"
-                  "d /tmp/gradle-rw/upper 0755 claude claude -"
-                  "d /tmp/gradle-rw/work 0755 claude claude -"
                 ];
 
                 nix.settings.experimental-features = [
