@@ -43,10 +43,6 @@
               ID="$(cat /proc/sys/kernel/random/uuid)"
 
               # --- virtiofsd helper ---
-              # Starts a virtiofsd instance as a systemd user service.
-              # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
-              # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
-              # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
               UNITS=()
               SOCKETS=()
               start_virtiofsd() {
@@ -56,6 +52,10 @@
 
                 rm -f "$sock"
 
+                # Starts a virtiofsd instance as a systemd user service.
+                # virtiofsd runs unprivileged in a user namespace (--sandbox=namespace).
+                # --uid-map / --gid-map: map host user to namespace root (single-entry, no /etc/subuid needed)
+                # --translate-uid / --translate-gid: map guest uid/gid 1000 to namespace uid/gid 0 (= host user)
                 systemd-run --user --unit="$unit" --collect \
                   -- virtiofsd \
                     --socket-path="$sock" \
