@@ -27,7 +27,7 @@
             inherit (self.nixosConfigurations.${system}.config.microvm) declaredRunner;
           in
           final.writeShellApplication {
-            name = "claude-run";
+            name = "claude-vm";
             runtimeInputs = with final; [
               systemd
               virtiofsd
