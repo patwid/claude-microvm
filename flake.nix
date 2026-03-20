@@ -119,6 +119,10 @@
               write_vm_env() {
                 cat > "$CLAUDE_DIR/.microvm-env" <<ENVEOF
 DIRENV_ALLOW=''${DIRENV_ALLOW:-0}
+GIT_AUTHOR_NAME=$(git config user.name 2>/dev/null || echo "Claude")
+GIT_AUTHOR_EMAIL=$(git config user.email 2>/dev/null || echo "noreply@anthropic.com")
+GIT_COMMITTER_NAME=$(git config user.name 2>/dev/null || echo "Claude")
+GIT_COMMITTER_EMAIL=$(git config user.email 2>/dev/null || echo "noreply@anthropic.com")
 ENVEOF
               }
               write_vm_env
