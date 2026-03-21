@@ -79,8 +79,8 @@
 
               cleanup() {
                 # Restore settings.json before stopping virtiofsd
-                if [ -f "$WORK/.claude/settings.json.bak" ]; then
-                  mv "$WORK/.claude/settings.json.bak" "$WORK/.claude/settings.json"
+                if [ -n "''${_SETTINGS_BAK:-}" ] && [ -f "$_SETTINGS_BAK" ]; then
+                  mv "$_SETTINGS_BAK" "$WORK/.claude/settings.json"
                 fi
                 for u in "''${UNITS[@]+"''${UNITS[@]}"}"; do
                   systemctl --user stop "$u" 2>/dev/null || true
@@ -93,9 +93,11 @@
 
               # --- Patch settings.json on host (restored in cleanup) ---
               _SETTINGS="$WORK/.claude/settings.json"
+              _SETTINGS_BAK=""
               if [ -f "$_SETTINGS" ]; then
-                cp "$_SETTINGS" "$_SETTINGS.bak"
-                jq 'del(.permissions.disableBypassPermissionsMode)' "$_SETTINGS.bak" > "$_SETTINGS"
+                _SETTINGS_BAK="$(mktemp)"
+                cp "$_SETTINGS" "$_SETTINGS_BAK"
+                jq 'del(.permissions.disableBypassPermissionsMode)' "$_SETTINGS_BAK" > "$_SETTINGS"
               fi
 
               # --- Work share ---
