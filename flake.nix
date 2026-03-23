@@ -177,7 +177,7 @@ ENVEOF
                 microvm = {
                   hypervisor = "qemu";
                   mem = 16384;
-                  vcpu = 8;
+                  vcpu = 4;
                   balloon = true;
 
                   writableStoreOverlay = "/nix/.rw-store";
