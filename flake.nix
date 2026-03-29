@@ -19,9 +19,9 @@
         |> map (s: lib.mapAttrs (_: v: { ${s} = v; }) (f s))
         |> lib.foldAttrs lib.mergeAttrs { };
 
-      # NixOS module parameterized by workMountPoint
+      # NixOS module parameterized by workMountPoint and userName
       mkVmModule =
-        { workMountPoint }:
+        { workMountPoint, userName }:
         { config, pkgs, ... }:
         {
           nixpkgs.config.allowUnfree = true;
@@ -52,7 +52,7 @@
               {
                 tag = "claude-home";
                 source = "/tmp/claude-vm-home";
-                mountPoint = "/home/claude";
+                mountPoint = "/home/${userName}";
                 proto = "virtiofs";
               }
             ];
@@ -65,17 +65,17 @@
             ];
           };
 
-          users.groups.claude.gid = 1000;
-          users.users.claude = {
+          users.groups.${userName}.gid = 1000;
+          users.users.${userName} = {
             isNormalUser = true;
             uid = 1000;
-            group = "claude";
+            group = userName;
             extraGroups = [ "docker" ];
-            home = "/home/claude";
+            home = "/home/${userName}";
             shell = pkgs.bash;
           };
 
-          services.getty.autologinUser = "claude";
+          services.getty.autologinUser = userName;
 
           users.motd = "";
 
@@ -87,7 +87,7 @@
             enable = true;
             extraRules = [
               {
-                users = [ "claude" ];
+                users = [ userName ];
                 commands = [
                   {
                     command = "/run/current-system/sw/bin/poweroff";
@@ -143,7 +143,7 @@
           '';
 
           systemd.tmpfiles.rules = [
-            "d ${workMountPoint} 0755 claude claude -"
+            "d ${workMountPoint} 0755 ${userName} ${userName} -"
           ];
 
           nix.settings.experimental-features = [
@@ -163,11 +163,12 @@
         };
 
       # Package builder — use lib.makeOverridable so consumers can do:
-      #   pkgs.claude-vm.override { workMountPoint = "/home/claude/my-project"; }
+      #   pkgs.claude-vm.override { workMountPoint = "/home/claude/my-project"; userName = "dev"; }
       mkClaudeVm =
         {
           pkgs,
           workMountPoint ? "/work",
+          userName ? "claude",
         }:
         let
           inherit (pkgs.stdenv.hostPlatform) system;
@@ -175,7 +176,7 @@
             inherit system;
             modules = [
               microvm.nixosModules.microvm
-              (mkVmModule { inherit workMountPoint; })
+              (mkVmModule { inherit workMountPoint userName; })
             ];
           };
           inherit (vmConfig.config.microvm) declaredRunner;
@@ -325,7 +326,10 @@
           inherit system;
           modules = [
             microvm.nixosModules.microvm
-            (mkVmModule { workMountPoint = "/work"; })
+            (mkVmModule {
+              workMountPoint = "/work";
+              userName = "claude";
+            })
           ];
         };
 
