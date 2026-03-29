@@ -21,7 +21,11 @@
 
       # NixOS module parameterized by workMountPoint and userName
       mkVmModule =
-        { workMountPoint, userName }:
+        {
+          workMountPoint,
+          userName,
+          enableDocker,
+        }:
         { config, pkgs, ... }:
         {
           nixpkgs.config.allowUnfree = true;
@@ -30,7 +34,7 @@
 
           microvm = {
             hypervisor = "qemu";
-            mem = 16384;
+            mem = if enableDocker then 8192 else 4096;
             vcpu = 4;
             balloon = true;
 
@@ -70,7 +74,7 @@
             isNormalUser = true;
             uid = 1000;
             group = userName;
-            extraGroups = [ "docker" ];
+            extraGroups = lib.optionals enableDocker [ "docker" ];
             home = "/home/${userName}";
             shell = pkgs.bash;
           };
@@ -111,7 +115,7 @@
             nix-direnv.enable = true;
           };
 
-          virtualisation.docker.enable = true;
+          virtualisation.docker.enable = enableDocker;
 
           environment.variables = {
             SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt";
@@ -169,6 +173,7 @@
           pkgs,
           workMountPoint ? "/work",
           userName ? "claude",
+          enableDocker ? false,
         }:
         let
           inherit (pkgs.stdenv.hostPlatform) system;
@@ -176,7 +181,7 @@
             inherit system;
             modules = [
               microvm.nixosModules.microvm
-              (mkVmModule { inherit workMountPoint userName; })
+              (mkVmModule { inherit workMountPoint userName enableDocker; })
             ];
           };
           inherit (vmConfig.config.microvm) declaredRunner;
@@ -329,6 +334,7 @@
             (mkVmModule {
               workMountPoint = "/work";
               userName = "claude";
+              enableDocker = false;
             })
           ];
         };
