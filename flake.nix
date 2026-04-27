@@ -268,7 +268,8 @@
             # --- Claude home share ---
             if [ -z "''${CLAUDE_HOME:-}" ]; then
               DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
-              CLAUDE_HOME="$DATA_HOME/claude-microvm"
+              WORK_HASH="$(echo -n "$WORK" | sha256sum | cut -c1-12)"
+              CLAUDE_HOME="$DATA_HOME/claude-microvm/$WORK_HASH"
             fi
             mkdir -p "$CLAUDE_HOME"
             CLAUDE_DIR="$(realpath "$CLAUDE_HOME")"
