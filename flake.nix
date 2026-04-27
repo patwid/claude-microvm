@@ -202,6 +202,10 @@
             RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
             ID="$(cat /proc/sys/kernel/random/uuid)"
 
+            # Stable per-project identifier (git remote URL if available, else work dir)
+            REPO_URL="$(git -C "$WORK" remote get-url origin 2>/dev/null || true)"
+            WORK_ID="$(echo -n "''${REPO_URL:-$WORK}" | sha256sum | cut -c1-12)"
+
             # --- virtiofsd helper ---
             UNITS=()
             SOCKETS=()
@@ -268,8 +272,7 @@
             # --- Claude home share ---
             if [ -z "''${CLAUDE_HOME:-}" ]; then
               DATA_HOME="''${XDG_DATA_HOME:-$HOME/.local/share}"
-              WORK_HASH="$(echo -n "$WORK" | sha256sum | cut -c1-12)"
-              CLAUDE_HOME="$DATA_HOME/claude-microvm/$WORK_HASH"
+              CLAUDE_HOME="$DATA_HOME/claude-microvm/$WORK_ID"
             fi
             mkdir -p "$CLAUDE_HOME"
             CLAUDE_DIR="$(realpath "$CLAUDE_HOME")"
