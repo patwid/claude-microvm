@@ -282,6 +282,7 @@
               cat > "$CLAUDE_DIR/.microvm-env" <<ENVEOF
             DIRENV_ALLOW=''${DIRENV_ALLOW:-0}
             ENVEOF
+              [ -n "''${ANTHROPIC_API_KEY:-}" ] && echo "ANTHROPIC_API_KEY=''${ANTHROPIC_API_KEY}" >> "$CLAUDE_DIR/.microvm-env"
             }
             write_vm_env
 
