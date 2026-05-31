@@ -4,7 +4,7 @@
     name = "claude";
     launchCommand = "claude";
     # renovate: datasource=npm depName=@anthropic-ai/claude-code
-    # version: 2.1.156
+    # version: 2.1.159
     extraPackages = [ pkgs.claude-code ];
     shellInit = ''
       # Seed microVM disk-space awareness into Claude's user-level memory
