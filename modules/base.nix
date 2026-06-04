@@ -22,6 +22,16 @@ in
       default = "";
       description = "Agent-specific shell init (runs before launch)";
     };
+    mem = lib.mkOption {
+      type = lib.types.int;
+      default = 8192;
+      description = "VM memory in MB. Overridable at runtime via VM_MEM env var.";
+    };
+    vcpu = lib.mkOption {
+      type = lib.types.int;
+      default = 4;
+      description = "VM vCPU count. Overridable at runtime via VM_VCPU env var.";
+    };
   };
 
   config = {
@@ -31,8 +41,8 @@ in
 
     microvm = {
       hypervisor = "qemu";
-      mem = 4096;
-      vcpu = 4;
+      mem = cfg.mem;
+      vcpu = cfg.vcpu;
 
       writableStoreOverlay = "/nix/.rw-store";
 

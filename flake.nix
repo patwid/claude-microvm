@@ -22,7 +22,7 @@
         pi     = { suffix = "-pi";    agentModule = ./modules/agents/pi.nix;    dataDirName = "pi-microvm";    apiKeyVars = [ "ANTHROPIC_API_KEY" "OPENAI_API_KEY" "GEMINI_API_KEY" ]; };
       };
 
-      mkRunnerScript = { pkgs, runner, dataDirName, apiKeyVars, agentName }:
+      mkRunnerScript = { pkgs, runner, dataDirName, apiKeyVars, agentName, defaultMem, defaultVcpu }:
         let
           virtiofsd = pkgs.virtiofsd;
           hostname = "${agentName}-vm";
@@ -32,6 +32,8 @@
         in pkgs.writeShellScriptBin "microvm-run" ''
         set -euo pipefail
         WORK="$(realpath "''${WORK_DIR:-$(pwd)}")"
+        VM_MEM="''${VM_MEM:-${toString defaultMem}}"
+        VM_VCPU="''${VM_VCPU:-${toString defaultVcpu}}"
         RUNTIME="''${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
         ID="$(cat /proc/sys/kernel/random/uuid)"
 
@@ -256,6 +258,10 @@
           -e "s|${hostname}-virtiofs-agent-home.sock|$AGENT_SOCK|g"
           -e "s|/tmp/${hostname}-cri-storage|$CRI_DIR|g"
           -e "s|${hostname}-virtiofs-cri-storage.sock|$CRI_SOCK|g"
+          # Runtime mem/vcpu override (VM_MEM / VM_VCPU env vars)
+          -e "s| -m ${toString defaultMem} | -m $VM_MEM |g"
+          -e "s| -smp ${toString defaultVcpu} | -smp $VM_VCPU |g"
+          -e "s|size=${toString defaultMem}M|size=''${VM_MEM}M|g"
         )
 
         # Run QEMU with corrected paths
@@ -321,8 +327,15 @@
       packages = forSystems (system: let pkgs = nixpkgs.legacyPackages.${system}; in
         { default = self.packages.${system}.claude; } //
         builtins.mapAttrs (name: flavor: let
-          runner = self.nixosConfigurations."${name}${flavor.suffix}-${system}".config.microvm.runner.qemu;
-        in mkRunnerScript { inherit pkgs runner; inherit (flavor) dataDirName apiKeyVars; agentName = name; }) vmFlavors
+          nixosCfg = self.nixosConfigurations."${name}${flavor.suffix}-${system}".config;
+          runner = nixosCfg.microvm.runner.qemu;
+        in mkRunnerScript {
+          inherit pkgs runner;
+          inherit (flavor) dataDirName apiKeyVars;
+          agentName = name;
+          defaultMem = nixosCfg.claude-vm.agent.mem;
+          defaultVcpu = nixosCfg.claude-vm.agent.vcpu;
+        }) vmFlavors
       );
     };
 }
