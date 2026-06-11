@@ -7,9 +7,13 @@
       url = "github:microvm-nix/microvm.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    claude-code-nix = {
+      url = "github:sadjow/claude-code-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, microvm }:
+  outputs = { self, nixpkgs, microvm, claude-code-nix }:
     let
       lib = nixpkgs.lib;
       linuxSystems = [ "x86_64-linux" "aarch64-linux" ];
@@ -282,6 +286,7 @@
               ./modules/base.nix
               ./modules/cri.nix
               { claude-vm.cri.enable = true; }
+              { nixpkgs.overlays = [ claude-code-nix.overlays.default ]; }
               flavor.agentModule
             ];
           };
