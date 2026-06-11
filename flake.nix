@@ -20,7 +20,7 @@
       forSystems = lib.genAttrs linuxSystems;
 
       vmFlavors = {
-        claude = { suffix = "";        agentModule = ./modules/agents/claude.nix; dataDirName = "claude-microvm"; apiKeyVars = [ "ANTHROPIC_API_KEY" ]; };
+        claude = { suffix = "";        agentModule = ./modules/agents/claude.nix; dataDirName = "claude-microvm"; apiKeyVars = [ "ANTHROPIC_API_KEY" "CLAUDE_CODE_OAUTH_TOKEN" ]; };
         gemini = { suffix = "-gemini"; agentModule = ./modules/agents/gemini.nix; dataDirName = "gemini-microvm"; apiKeyVars = [ "GEMINI_API_KEY" ]; };
         codex  = { suffix = "-codex";  agentModule = ./modules/agents/codex.nix;  dataDirName = "codex-microvm";  apiKeyVars = [ "OPENAI_API_KEY" ]; };
         pi     = { suffix = "-pi";    agentModule = ./modules/agents/pi.nix;    dataDirName = "pi-microvm";    apiKeyVars = [ "ANTHROPIC_API_KEY" "OPENAI_API_KEY" "GEMINI_API_KEY" ]; };
@@ -31,7 +31,7 @@
           virtiofsd = pkgs.virtiofsd;
           hostname = "${agentName}-vm";
           apiKeyForwarding = lib.concatStringsSep "\n" (map (var:
-            ''[ -n "''${${var}:-}" ] && echo "${var}=''${${var}}" >> "$AGENT_DIR/.microvm-env"''
+            ''[ -n "''${${var}:-}" ] && echo "export ${var}=''${${var}}" >> "$AGENT_DIR/.microvm-env"''
           ) apiKeyVars);
         in pkgs.writeShellScriptBin "microvm-run" ''
         set -euo pipefail
