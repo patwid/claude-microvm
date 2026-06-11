@@ -53,5 +53,10 @@ VMEOF
     '';
   };
 
+  environment.variables.CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY = "1";
+  environment.variables.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1";
   environment.variables.DISABLE_AUTOUPDATER = "1";
+  environment.variables.DISABLE_TELEMETRY = "1";
+  environment.variables.DO_NOT_TRACK = "1";
+  environment.variables.IS_DEMO = "1";
 }
