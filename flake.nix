@@ -169,6 +169,7 @@
         # %q produces a single-quoted/escaped form that survives `source`
         # so values like AGENTS_ARGS='-p "hi there"' round-trip intact.
         printf 'AGENTS_ARGS=%q\n' "''${AGENTS_ARGS:---dangerously-skip-permissions}" >> "$AGENT_DIR/.microvm-env"
+        printf 'HOST_WORK_DIR=%q\n' "$WORK" >> "$AGENT_DIR/.microvm-env"
         ${apiKeyForwarding}
 
         # Copy custom CA certificates into agent home for the VM

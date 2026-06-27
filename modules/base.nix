@@ -138,12 +138,20 @@ in
     };
 
     programs.bash.interactiveShellInit = ''
-      git config --global --add safe.directory /work 2>/dev/null || true
-
       ${cfg.shellInit}
 
-      cd /work 2>/dev/null || true
       [ -f ~/.microvm-env ] && source ~/.microvm-env
+
+      # microvm-work-bindmount.service bind-mounts /work at HOST_WORK_DIR before login
+      git config --global --unset-all safe.directory 2>/dev/null || true
+      git config --global --add safe.directory /work 2>/dev/null || true
+      if [ -n "''${HOST_WORK_DIR:-}" ] && [ "''${HOST_WORK_DIR:-}" != "/work" ]; then
+        git config --global --add safe.directory "''${HOST_WORK_DIR}" 2>/dev/null || true
+        cd "''${HOST_WORK_DIR}" 2>/dev/null || cd /work 2>/dev/null || true
+      else
+        cd /work 2>/dev/null || true
+      fi
+
       if [ "''${DIRENV_ALLOW:-0}" = "1" ]; then
         if [ -f ~/.microvm-devshell ] && [ -s ~/.microvm-devshell ]; then
           echo "loading dev environment..."
@@ -239,6 +247,33 @@ in
         else
           echo "microvm-import-nix-db: no host DB snapshot at $SRC, skipping"
         fi
+      '';
+    };
+
+    # Bind-mount /work at HOST_WORK_DIR so getcwd() returns the host path rather
+    # than /work. A symlink can't achieve this — chdir() resolves it before the
+    # kernel records the cwd, so getcwd() always returns /work.
+    systemd.services.microvm-work-bindmount = {
+      description = "Bind-mount /work at the host working directory path";
+      after = [ "home-agent.mount" "work.mount" ];
+      before = [ "getty@hvc0.service" ];
+      wantedBy = [ "multi-user.target" ];
+      path = [ pkgs.util-linux ];
+      serviceConfig = {
+        Type = "oneshot";
+        RemainAfterExit = true;
+      };
+      script = ''
+        ENV_FILE=/home/agent/.microvm-env
+        [ -f "$ENV_FILE" ] || exit 0
+        source "$ENV_FILE"
+        [ -z "''${HOST_WORK_DIR:-}" ] && exit 0
+        [ "''${HOST_WORK_DIR}" = "/work" ] && exit 0
+        # Already mounted (e.g. service re-run)
+        mountpoint -q "''${HOST_WORK_DIR}" && exit 0
+        mkdir -p "''${HOST_WORK_DIR}"
+        mount --bind /work "''${HOST_WORK_DIR}"
+        echo "microvm-work-bindmount: /work → ''${HOST_WORK_DIR}"
       '';
     };
 
