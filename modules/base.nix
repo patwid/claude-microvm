@@ -142,6 +142,9 @@ in
 
       [ -f ~/.microvm-env ] && source ~/.microvm-env
 
+      [ -n "''${GIT_USER_NAME:-}" ] && git config --global user.name "''${GIT_USER_NAME}" 2>/dev/null || true
+      [ -n "''${GIT_USER_EMAIL:-}" ] && git config --global user.email "''${GIT_USER_EMAIL}" 2>/dev/null || true
+
       # microvm-work-bindmount.service bind-mounts /work at HOST_WORK_DIR before login
       git config --global --unset-all safe.directory 2>/dev/null || true
       git config --global --add safe.directory /work 2>/dev/null || true
