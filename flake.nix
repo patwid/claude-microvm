@@ -198,6 +198,10 @@
         # so values like AGENTS_ARGS='-p "hi there"' round-trip intact.
         printf 'AGENTS_ARGS=%q\n' "''${AGENTS_ARGS:---dangerously-skip-permissions}" >> "$AGENT_DIR/.microvm-env"
         printf 'HOST_WORK_DIR=%q\n' "$WORK" >> "$AGENT_DIR/.microvm-env"
+        _GIT_USER_NAME="$(git config --global user.name 2>/dev/null || true)"
+        _GIT_USER_EMAIL="$(git config --global user.email 2>/dev/null || true)"
+        [ -n "$_GIT_USER_NAME" ] && printf 'GIT_USER_NAME=%q\n' "$_GIT_USER_NAME" >> "$AGENT_DIR/.microvm-env"
+        [ -n "$_GIT_USER_EMAIL" ] && printf 'GIT_USER_EMAIL=%q\n' "$_GIT_USER_EMAIL" >> "$AGENT_DIR/.microvm-env"
         ${apiKeyForwarding}
 
         # Copy custom CA certificates into agent home for the VM
