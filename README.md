@@ -235,7 +235,7 @@ ENABLE_CRI=crun make claude.run
 ENABLE_CRI=podman make claude.run
 ```
 
-Container images and layers are stored on the host at `$AGENT_HOME/cri-storage/` via a dedicated virtiofs share at `/var/lib/containers`, so they persist across VM restarts and don't consume the VM's RAM-backed root filesystem.
+Container images and layers are stored on a dedicated ext4 disk image at `$AGENT_HOME-cri/cri-storage.img` (sparse, up to 30 GiB), mounted at `/var/lib/containers`, so they persist across VM restarts and don't consume the VM's RAM-backed root filesystem. The image is kept in a host-only sibling directory next to agent home rather than inside it, so it is never exported through the agent-home virtiofs share and the guest cannot read or tamper with its own raw storage backing file. A real block-backed filesystem is required here rather than a virtiofs share: image unpack must `lchown` extracted layers to UID 0, which the host's rootless virtiofsd cannot do (it has a single-ID uid map). On a share, `docker info` reports `Backing Filesystem: fuse` and overlay2/KinD layer extraction fails with `lchown … operation not permitted`; on the ext4 volume it reports `extfs` and works.
 
 #### Available runtimes
 

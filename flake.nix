@@ -101,18 +101,25 @@
         fi
         AGENT_TEMP=""
 
-        # --- CRI storage share (virtiofsd) ---
-        CRI_SOCK="$RUNTIME/$VM_ID-virtiofs-$ID-cri-storage.sock"
-        CRI_UNIT="$VM_ID-virtiofsd-$ID-cri-storage"
-        CRI_STATE="$RUNTIME/$VM_ID-virtiofsd-$ID-cri-storage.dir"
-        CRI_DIR="$AGENT_DIR/cri-storage"
-        mkdir -p "$CRI_DIR"
+        # --- CRI storage volume (ext4 block image) ---
+        # Container runtimes need a real block-backed fs that permits lchown to
+        # arbitrary UIDs during image unpack — a virtiofs share cannot (rootless
+        # virtiofsd has a single-ID uid map). The image is a sparse ext4 disk
+        # created on first boot by microvm.nix's createVolumesScript. It must NOT
+        # live inside $AGENT_DIR: that directory is exported into the guest via
+        # the agent-home virtiofs share, so the guest could read or tamper with
+        # its own raw storage backing file. Keep it in a host-only sibling state
+        # dir that persists across runs but is never shared into the guest. The
+        # CRI module declares the image as "cri-storage.img"; rewrite it to this
+        # absolute path below.
+        CRI_STATE_DIR="$AGENT_DIR-cri"
+        mkdir -p "$CRI_STATE_DIR"
+        CRI_IMG="$CRI_STATE_DIR/cri-storage.img"
 
         cleanup() {
           ${pkgs.systemd}/bin/systemctl --user stop "$UNIT" 2>/dev/null || true
           ${pkgs.systemd}/bin/systemctl --user stop "$AGENT_UNIT" 2>/dev/null || true
-          ${pkgs.systemd}/bin/systemctl --user stop "$CRI_UNIT" 2>/dev/null || true
-          rm -f "$SOCK" "$AGENT_SOCK" "$STATE" "$AGENT_STATE" "$CRI_SOCK" "$CRI_STATE"
+          rm -f "$SOCK" "$AGENT_SOCK" "$STATE" "$AGENT_STATE"
           if [ -n "$AGENT_TEMP" ]; then
             rm -rf "$AGENT_TEMP"
           fi
@@ -150,41 +157,6 @@
             sleep 0.1
           done
           [ -S "$AGENT_SOCK" ] || { echo "error: agent-home virtiofsd socket did not appear"; exit 1; }
-        fi
-
-        # --- CRI storage virtiofsd ---
-        CRI_NEED_START=1
-        if ${pkgs.systemd}/bin/systemctl --user is-active "$CRI_UNIT" &>/dev/null; then
-          if [ -f "$CRI_STATE" ] && [ "$(cat "$CRI_STATE")" = "$CRI_DIR" ] && [ -S "$CRI_SOCK" ]; then
-            CRI_NEED_START=0
-          else
-            ${pkgs.systemd}/bin/systemctl --user stop "$CRI_UNIT" 2>/dev/null || true
-          fi
-        fi
-
-        if [ "$CRI_NEED_START" = "1" ]; then
-          rm -f "$CRI_SOCK"
-
-          ${pkgs.systemd}/bin/systemd-run --user --unit="$CRI_UNIT" --collect \
-            -- ${virtiofsd}/bin/virtiofsd \
-              --socket-path="$CRI_SOCK" \
-              --shared-dir="$CRI_DIR" \
-              --sandbox=namespace \
-              --uid-map ":0:$(id -u):1:" \
-              --gid-map ":0:$(id -g):1:" \
-              --translate-uid "map:1000:0:1" \
-              --translate-gid "map:1000:0:1" \
-              --socket-group="$(id -gn)" \
-              --xattr \
-              --xattrmap ":prefix:all:trusted.:user.virtiofs.::prefix:all:security.:user.virtiofs.::ok:all:::"
-
-          echo "$CRI_DIR" > "$CRI_STATE"
-
-          for i in $(seq 1 50); do
-            [ -S "$CRI_SOCK" ] && break
-            sleep 0.1
-          done
-          [ -S "$CRI_SOCK" ] || { echo "error: cri-storage virtiofsd socket did not appear"; exit 1; }
         fi
 
         # Write host env vars for the VM
@@ -261,6 +233,11 @@
             || rm -f "$AGENT_DIR/.microvm-nix-db.sqlite"
         fi
 
+        # $CRI_IMG is used as sed replacement text below. Escape characters
+        # that are special on the replacement side (\, &) and the | delimiter
+        # so a path with such characters can't corrupt the generated command.
+        _CRI_IMG_ESC=$(printf '%s' "$CRI_IMG" | ${pkgs.gnused}/bin/sed -e 's/[\\&|]/\\&/g')
+
         # Build sed arguments for QEMU runner
         _SED_ARGS=(
           # Process and QEMU name: inject project basename
@@ -271,8 +248,16 @@
           -e "s|${hostname}-virtiofs-work.sock|$SOCK|g"
           -e "s|/tmp/${hostname}-home|$AGENT_DIR|g"
           -e "s|${hostname}-virtiofs-agent-home.sock|$AGENT_SOCK|g"
-          -e "s|/tmp/${hostname}-cri-storage|$CRI_DIR|g"
-          -e "s|${hostname}-virtiofs-cri-storage.sock|$CRI_SOCK|g"
+          # CRI storage volume image: microvm.nix emits the relative path
+          # "cri-storage.img" in both the createVolumesScript and the QEMU
+          # -drive; point both at the persistent image in agent home.
+          -e "s|cri-storage.img|$_CRI_IMG_ESC|g"
+          # microvm.nix unconditionally sets cache=none (O_DIRECT) on volume
+          # drives, which fails when agent home is on a filesystem without
+          # O_DIRECT support (tmpfs, some network/virtiofs mounts). The CRI
+          # store is a rebuildable cache, so writeback (host page cache) is the
+          # portable choice and works on every backing filesystem.
+          -e "s|,cache=none|,cache=writeback|g"
           # Runtime mem/vcpu override (VM_MEM / VM_VCPU env vars)
           -e "s| -m ${toString defaultMem} | -m $VM_MEM |g"
           -e "s| -smp ${toString defaultVcpu} | -smp $VM_VCPU |g"

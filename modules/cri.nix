@@ -36,12 +36,21 @@ CRIEOF
       export CONTAINER_HOST=unix:///run/podman/podman.sock
     '';
 
-    microvm.shares = [
+    # Container storage must live on a real block-backed filesystem, NOT a
+    # virtiofs share. The host virtiofsd runs rootless with a single-ID uid/gid
+    # map, so it cannot lchown extracted layer files to UID 0 — overlay2/KinD
+    # image unpack fails with "lchown /bin: operation not permitted" and
+    # `docker info` reports `Backing Filesystem: fuse`. A dedicated ext4 volume
+    # gives the guest a genuine root-capable fs (Backing Filesystem: extfs).
+    # The sparse image is created on the host and persists in agent home; the
+    # runner script (flake.nix) rewrites the `cri-storage.img` path accordingly.
+    microvm.volumes = [
       {
-        tag = "cri-storage";
-        source = "/tmp/${config.networking.hostName}-cri-storage";
+        image = "cri-storage.img";
+        label = "cri-storage";
         mountPoint = "/var/lib/containers";
-        proto = "virtiofs";
+        size = 30720; # MiB, sparse — max size, only consumes what is used
+        fsType = "ext4";
       }
     ];
 
