@@ -242,10 +242,22 @@
         # visible via the /nix/.ro-store overlay lowerdir. Without this, the VM
         # treats host-provided paths as missing and substitutes them — copying
         # bytes that already exist on disk into the tmpfs upperdir.
-        # sqlite3 .backup produces a consistent file even under concurrent writes.
+        #
+        # Plain `.backup` restarts from page 1 whenever the source db is
+        # written by another connection (e.g. nix-daemon) mid-copy. On an
+        # active host this can loop indefinitely, burning CPU without making
+        # progress. Opening an explicit read transaction first pins a
+        # snapshot on the same connection that runs the backup, so external
+        # commits during the backup no longer invalidate copied pages.
+        # See: https://sqlite.org/forum/info/cca839708d74a20014f7188b86a19b267602d497bfa90ec1d1e79111a5b24adb
         if [ -f /nix/var/nix/db/db.sqlite ]; then
           ${pkgs.sqlite}/bin/sqlite3 /nix/var/nix/db/db.sqlite \
-            ".backup $AGENT_DIR/.microvm-nix-db.sqlite" \
+            ".timeout 30000" \
+            "BEGIN;" \
+            "SELECT count(*) FROM sqlite_master;" \
+            ".backup '$AGENT_DIR/.microvm-nix-db.sqlite'" \
+            "COMMIT;" \
+            > /dev/null \
             || rm -f "$AGENT_DIR/.microvm-nix-db.sqlite"
         fi
 
