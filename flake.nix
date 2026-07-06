@@ -215,6 +215,11 @@
             || rm -f "$AGENT_DIR/.microvm-nix-db.sqlite"
         fi
 
+        # $CRI_IMG is used as sed replacement text below. Escape characters
+        # that are special on the replacement side (\, &) and the | delimiter
+        # so a path with such characters can't corrupt the generated command.
+        _CRI_IMG_ESC=$(printf '%s' "$CRI_IMG" | ${pkgs.gnused}/bin/sed -e 's/[\\&|]/\\&/g')
+
         # Build sed arguments for QEMU runner
         _SED_ARGS=(
           # Process and QEMU name: inject project basename
@@ -228,7 +233,7 @@
           # CRI storage volume image: microvm.nix emits the relative path
           # "cri-storage.img" in both the createVolumesScript and the QEMU
           # -drive; point both at the persistent image in agent home.
-          -e "s|cri-storage.img|$CRI_IMG|g"
+          -e "s|cri-storage.img|$_CRI_IMG_ESC|g"
           # microvm.nix unconditionally sets cache=none (O_DIRECT) on volume
           # drives, which fails when agent home is on a filesystem without
           # O_DIRECT support (tmpfs, some network/virtiofs mounts). The CRI
