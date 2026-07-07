@@ -6,6 +6,10 @@
   "nix": {
     "enabled": true
   },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 7am on monday"]
+  },
   "packageRules": [
     {
       "matchManagers": ["nix"],
